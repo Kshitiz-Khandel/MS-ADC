@@ -4,11 +4,11 @@ from typing import Dict, Any, Tuple
 class CloudDLPSanitizer:
     """
     Sanitizes proprietary cleanroom recipe codes, internal chamber serials,
-    and operator credentials from inspection payloads before LLM ingestion (Comp 15).
+    and operator credentials from inspection payloads before LLM ingestion.
     """
     def __init__(self):
-        # Proprietary cleanroom recipe pattern: RECIPE-XXX-1234
-        self.recipe_pattern = re.compile(r"RECIPE-[A-Z0-9]+-[0-9]+", re.IGNORECASE)
+        # Proprietary cleanroom recipe pattern: RECIPE-XXX-1234, RECIPE-OXIDE-ETCH-994, RECIPE-7712
+        self.recipe_pattern = re.compile(r"RECIPE-[A-Z0-9\-_]+", re.IGNORECASE)
         # Internal hardware serial: SN-[A-Z0-9]{6,12}
         self.serial_pattern = re.compile(r"SN-[A-Z0-9]{6,12}", re.IGNORECASE)
         # Operator email / PII
@@ -49,6 +49,22 @@ class CloudDLPSanitizer:
                 cleaned_data[k] = cleaned_val
                 for ck, cv in counts.items():
                     total_counts[ck] += cv
+            elif isinstance(v, list):
+                cleaned_list = []
+                for item in v:
+                    if isinstance(item, str):
+                        c_item, counts = self.sanitize_text(item)
+                        cleaned_list.append(c_item)
+                        for ck, cv in counts.items():
+                            total_counts[ck] += cv
+                    elif isinstance(item, dict):
+                        c_item, counts = self.sanitize_dict(item)
+                        cleaned_list.append(c_item)
+                        for ck, cv in counts.items():
+                            total_counts[ck] += cv
+                    else:
+                        cleaned_list.append(item)
+                cleaned_data[k] = cleaned_list
             else:
                 cleaned_data[k] = v
         return cleaned_data, total_counts
