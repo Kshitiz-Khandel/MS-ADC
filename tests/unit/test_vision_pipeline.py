@@ -1,7 +1,9 @@
 import unittest
 from src.ingestion.wafer_loader import WM811KWaferLoader
 from src.ingestion.micro_batcher import DynamicMicroBatcher
+from src.ingestion.augmentor import CleanroomDataAugmentor
 from src.models.die_vfm import DieVFMClassifier, DIE_DEFECT_CLASSES
+from src.models.base import DefectClassifierInterface
 from src.models.fine_tune_vfm import VFMFineTuner
 from src.models.export_tensorrt import TensorRTExporter
 
@@ -9,8 +11,13 @@ class TestVisionAndIngestionSuite(unittest.TestCase):
     def setUp(self):
         self.wafer_loader = WM811KWaferLoader(target_resolution=(224, 224))
         self.batcher = DynamicMicroBatcher(max_batch_size=16, max_latency_ms=25.0)
+        self.augmentor = CleanroomDataAugmentor()
         self.classifier = DieVFMClassifier()
         self.exporter = TensorRTExporter()
+
+    def test_classifier_implements_interface(self):
+        self.assertTrue(issubclass(DieVFMClassifier, DefectClassifierInterface))
+        self.assertIsInstance(self.classifier, DefectClassifierInterface)
 
     def test_synthetic_wafer_map_generation_and_kpis(self):
         center_matrix = self.wafer_loader.generate_synthetic_wafer(pattern="Center", size=50)
@@ -27,6 +34,19 @@ class TestVisionAndIngestionSuite(unittest.TestCase):
         self.assertEqual(res["failure_type"], "Edge-Ring")
         self.assertTrue(len(res["image_base64"]) > 10)
         self.assertEqual(res["resolution"], [224, 224])
+
+    def test_cleanroom_data_augmentor_matrix_and_features(self):
+        matrix = self.wafer_loader.generate_synthetic_wafer(pattern="Scratch", size=30)
+        flipped = self.augmentor.augment_matrix(matrix, flip_horizontal=True, flip_vertical=True)
+        self.assertEqual(len(flipped), 30)
+        self.assertEqual(len(flipped[0]), 30)
+
+        clustered = self.augmentor.inject_defect_cluster(matrix, defect_code=2, cluster_radius=2)
+        self.assertEqual(len(clustered), 30)
+
+        feat = [0.1] * 768
+        jittered = self.augmentor.augment_feature_vector(feat)
+        self.assertEqual(len(jittered), 768)
 
     def test_dynamic_micro_batching_stream(self):
         mock_stream = [{"die_id": f"die_{i}", "lot_id": "LOT-1"} for i in range(45)]
