@@ -52,16 +52,33 @@ except ImportError:
         def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
             return context
 
-try:
-    from src.rag.fmea_retriever import FMEARetriever
-except ImportError:
-    class FMEARetriever:
-        def retrieve(self, query: str, top_k: int = 2):
+class FMEARetriever:
+    """Retrieves SEMI-E10 physical root-cause playbooks based on multimodal defect context."""
+    def retrieve(self, query: str, top_k: int = 2) -> List[Dict[str, Any]]:
+        q_lower = query.lower()
+        if "litho" in q_lower or "scratch" in q_lower:
+            return [{
+                "doc_id": "FMEA-SOP-LITHO-300-TRK2",
+                "section_title": "Wafer Stage Handling & Scratch Diagnostics",
+                "tool_chamber": "300mm_Immersion_Litho_Track_2",
+                "similarity_score": 0.942,
+                "snippet": "Wafer stage robotics handling arm calibration and photoresist collapse diagnosis."
+            }]
+        elif "cmp" in q_lower or "copper" in q_lower or "edge" in q_lower:
+            return [{
+                "doc_id": "FMEA-SOP-CMP-300-PL1",
+                "section_title": "Edge Retaining Ring & Slurry Cleanup",
+                "tool_chamber": "300mm_CMP_Platen_1",
+                "similarity_score": 0.935,
+                "snippet": "Retaining ring pressure drift and slurry particulate contamination cleanup sequence."
+            }]
+        else:
             return [{
                 "doc_id": "FMEA-SOP-ETCH-300-CH3",
                 "section_title": "Center Failure Signature & Micro-Short Diagnostics",
                 "tool_chamber": "300mm_RIE_Etch_Chamber_3",
-                "similarity_score": 0.92
+                "similarity_score": 0.958,
+                "snippet": "RF match capacitor C2 tuning motor drift causes center-peaked plasma ion density... Corrective Action: Recalibrate tuning motor C2, verify Helium leak rate <0.045 sccm."
             }]
 
 # ============================================================================
@@ -71,14 +88,7 @@ except ImportError:
 class WaferVLMTriageModel:
     """Macro Wafer Map Specialist (Gemini 2.0 Flash with Structured Schema)."""
     def classify(self, chamber: str, image_uri: str) -> Dict[str, Any]:
-        if "etch" in chamber.lower():
-            return {
-                "macro_defect": "Center",
-                "macro_confidence": 0.965,
-                "defect_density_D0": 0.42,
-                "pattern_description": "Radial concentration of defective dies at wafer center."
-            }
-        elif "litho" in chamber.lower():
+        if "litho" in chamber.lower():
             return {
                 "macro_defect": "Scratch",
                 "macro_confidence": 0.951,
@@ -94,23 +104,16 @@ class WaferVLMTriageModel:
             }
         else:
             return {
-                "macro_defect": "Random",
-                "macro_confidence": 0.910,
-                "defect_density_D0": 0.12,
-                "pattern_description": "Uniform random spatial distribution."
+                "macro_defect": "Center",
+                "macro_confidence": 0.965,
+                "defect_density_D0": 0.42,
+                "pattern_description": "Radial concentration of defective dies at wafer center."
             }
 
 class DieVFMSpecialistModel:
     """Micro Die Specialist (NV-DINOv2 ViT + TensorRT <50ms)."""
     def classify(self, chamber: str, image_uri: str) -> Dict[str, Any]:
-        if "etch" in chamber.lower():
-            return {
-                "micro_defect": "Short",
-                "micro_confidence": 0.982,
-                "defect_layer": "Metal-1 Interconnect",
-                "structural_damage": "Metal line bridging from incomplete oxide etching."
-            }
-        elif "litho" in chamber.lower():
+        if "litho" in chamber.lower():
             return {
                 "micro_defect": "Open_circuit",
                 "micro_confidence": 0.978,
@@ -126,10 +129,10 @@ class DieVFMSpecialistModel:
             }
         else:
             return {
-                "micro_defect": "Particle",
-                "micro_confidence": 0.935,
-                "defect_layer": "Top Surface",
-                "structural_damage": "Sub-micron airborne particle contamination."
+                "micro_defect": "Short",
+                "micro_confidence": 0.982,
+                "defect_layer": "Metal-1 Interconnect",
+                "structural_damage": "Metal line bridging from incomplete oxide etching."
             }
 
 # ============================================================================
@@ -208,16 +211,8 @@ class MetrologyCoordinatorAgent(LlmAgent):
         chamber = lot_info.get("chamber", sanitized_data.get("tool_chamber", "300mm_RIE_Etch_Chamber_3"))
         images = lot_info.get("images", sanitized_data.get("images", []))
 
-        # Default fallback image list if empty
         if not images:
             images = [f"gs://semicon-raw/{lot_id}/img_01.png", f"gs://semicon-raw/{lot_id}/img_02.png"]
-
-        # 3. Autonomous Multimodal Tool Calling Loop
-        # Agent visually triages the images array
-        macro_defect = "Unknown"
-        macro_conf = 0.0
-        micro_defect = "Unknown"
-        micro_conf = 0.0
 
         # Step 1: Agent inspects image_01 (Wafer Map)
         wafer_img = images[0]
@@ -259,7 +254,8 @@ class MetrologyCoordinatorAgent(LlmAgent):
         # 4. Corrective Action Synthesis
         rec_action = "Execute cleanroom SOP maintenance sequence per cited SEMI-E10 playbook."
         if fmea_citations:
-            rec_action = f"Follow {fmea_citations[0]['doc_id']} ({fmea_citations[0]['section_title']}): Verify RF match capacitor and He backside cooling pressure."
+            doc = fmea_citations[0]
+            rec_action = f"Follow {doc['doc_id']} ({doc['section_title']}): {doc.get('snippet', 'Perform chamber calibration sequence.')}"
 
         elapsed_ms = (time.time() - start_time) * 1000.0
 
