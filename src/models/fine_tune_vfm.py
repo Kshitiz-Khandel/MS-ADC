@@ -8,11 +8,11 @@ from src.models.die_vfm import DieVFMClassifier, DIE_DEFECT_CLASSES
 
 class VFMFineTuner:
     """
-    Lightweight few-shot linear head trainer for NV-DINOv2 representations.
-    Demonstrates rapid convergence (<5 minutes) on K-shot labeled cleanroom datasets.
-    Includes epoch validation, learning rate scheduling, and best-model checkpointing.
+    Few-shot linear probe optimizer for Vision Foundation Model representations.
+    Utilizes AdamW optimization and Cosine Annealing learning rate schedule for fast, stable convergence.
+    Includes validation monitoring and best-model checkpointing.
     """
-    def __init__(self, model: DieVFMClassifier, learning_rate: float = 0.05):
+    def __init__(self, model: DieVFMClassifier, learning_rate: float = 0.01):
         self.model = model
         self.lr = learning_rate
 
@@ -23,7 +23,6 @@ class VFMFineTuner:
         for class_idx in range(len(DIE_DEFECT_CLASSES)):
             for _ in range(k_shot):
                 feat = [random.gauss(0, 0.05) for _ in range(self.model.embedding_dim)]
-                # Add distinctive signature for target class
                 start = class_idx * 10
                 for d in range(start, start + 10):
                     feat[d] += 2.0
@@ -31,37 +30,6 @@ class VFMFineTuner:
                 y_list.append(class_idx)
                 
         return X_list, y_list
-
-    def train_epoch(self, X: List[List[float]], y: List[int]) -> float:
-        """Executes one SGD epoch over linear head weights."""
-        total_loss = 0.0
-        num_samples = len(y)
-        if num_samples == 0:
-            return 0.0
-        
-        for i in range(num_samples):
-            feat = X[i]
-            label = y[i]
-            
-            # Forward
-            logits = self.model.predict_logits(feat)
-            probs = self.model.softmax(logits)
-            
-            # Cross-Entropy Loss
-            loss = -math.log(probs[label] + 1e-8)
-            total_loss += loss
-            
-            # Gradient: dL/dlogits = probs - y_onehot
-            grad_logits = [probs[j] - (1.0 if j == label else 0.0) for j in range(self.model.num_classes)]
-            
-            # Update W and b
-            for d in range(self.model.embedding_dim):
-                for j in range(self.model.num_classes):
-                    self.model.weights[d][j] -= self.lr * feat[d] * grad_logits[j]
-            for j in range(self.model.num_classes):
-                self.model.bias[j] -= self.lr * grad_logits[j]
-            
-        return float(total_loss / num_samples)
 
     def evaluate(self, X: List[List[float]], y: List[int]) -> Tuple[float, float, List[int]]:
         """Computes average loss, accuracy, and predicted labels on given dataset."""
@@ -94,7 +62,7 @@ class VFMFineTuner:
         y_train: List[int],
         X_val: Optional[List[List[float]]] = None,
         y_val: Optional[List[int]] = None,
-        epochs: int = 20,
+        epochs: int = 35,
         checkpoint_dir: Optional[str] = "models"
     ) -> Dict[str, Any]:
         """
@@ -112,43 +80,99 @@ class VFMFineTuner:
 
         os.makedirs(checkpoint_dir or "models", exist_ok=True)
 
-        for epoch in range(1, epochs + 1):
-            train_loss = self.train_epoch(X_train, y_train)
-            train_loss_history.append(round(train_loss, 4))
+        if self.model.use_pytorch:
+            import torch
+            import torch.nn as nn
+            import torch.optim as optim
 
-            if X_val and y_val:
-                val_loss, val_acc, _ = self.evaluate(X_val, y_val)
-                val_loss_history.append(round(val_loss, 4))
-                val_acc_history.append(round(val_acc, 2))
+            device = self.model.device
+            head = self.model.torch_head.to(device)
+            head.train()
+            optimizer = optim.AdamW(head.parameters(), lr=self.lr, weight_decay=1e-3)
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+            criterion = nn.CrossEntropyLoss()
 
-                # Check for improvement
-                if val_acc > best_val_acc or (val_acc == best_val_acc and val_loss < best_val_loss):
-                    best_val_acc = val_acc
-                    best_val_loss = val_loss
-                    best_epoch = epoch
-                    best_path = os.path.join(checkpoint_dir or "models", "checkpoint_best.pt")
-                    best_checkpoint_path = self.model.save_checkpoint(
-                        best_path,
-                        epoch=epoch,
-                        val_accuracy=val_acc,
-                        metadata={"train_loss": train_loss, "val_loss": val_loss}
-                    )
-            else:
-                # If no validation set, use train loss as metric
-                if train_loss < best_val_loss:
-                    best_val_loss = train_loss
-                    best_epoch = epoch
-                    best_path = os.path.join(checkpoint_dir or "models", "checkpoint_best.pt")
-                    best_checkpoint_path = self.model.save_checkpoint(
-                        best_path,
-                        epoch=epoch,
-                        metadata={"train_loss": train_loss}
-                    )
+            X_tr_t = torch.tensor(X_train, dtype=torch.float32).to(device)
+            y_tr_t = torch.tensor(y_train, dtype=torch.long).to(device)
+
+            for epoch in range(1, epochs + 1):
+                optimizer.zero_grad()
+                logits = head(X_tr_t)
+                loss = criterion(logits, y_tr_t)
+                loss.backward()
+                optimizer.step()
+                scheduler.step()
+
+                train_loss = float(loss.item())
+                train_loss_history.append(round(train_loss, 4))
+
+                # Sync into CPU python weights
+                with torch.no_grad():
+                    self.model.weights = head.weight.t().cpu().tolist()
+                    self.model.bias = head.bias.cpu().tolist()
+
+                if X_val and y_val:
+                    val_loss, val_acc, _ = self.evaluate(X_val, y_val)
+                    val_loss_history.append(round(val_loss, 4))
+                    val_acc_history.append(round(val_acc, 2))
+
+                    if val_acc > best_val_acc or (val_acc == best_val_acc and val_loss < best_val_loss):
+                        best_val_acc = val_acc
+                        best_val_loss = val_loss
+                        best_epoch = epoch
+                        best_path = os.path.join(checkpoint_dir or "models", "checkpoint_best.pt")
+                        best_checkpoint_path = self.model.save_checkpoint(
+                            best_path,
+                            epoch=epoch,
+                            val_accuracy=val_acc,
+                            metadata={"train_loss": train_loss, "val_loss": val_loss}
+                        )
+                else:
+                    if train_loss < best_val_loss:
+                        best_val_loss = train_loss
+                        best_epoch = epoch
+                        best_path = os.path.join(checkpoint_dir or "models", "checkpoint_best.pt")
+                        best_checkpoint_path = self.model.save_checkpoint(
+                            best_path,
+                            epoch=epoch,
+                            metadata={"train_loss": train_loss}
+                        )
+        else:
+            # Fallback pure python SGD
+            for epoch in range(1, epochs + 1):
+                total_loss = 0.0
+                for i in range(len(y_train)):
+                    feat = X_train[i]
+                    label = y_train[i]
+                    logits = self.model.predict_logits(feat)
+                    probs = self.model.softmax(logits)
+                    loss = -math.log(probs[label] + 1e-8)
+                    total_loss += loss
+                    grad_logits = [probs[j] - (1.0 if j == label else 0.0) for j in range(self.model.num_classes)]
+                    for d in range(self.model.embedding_dim):
+                        for j in range(self.model.num_classes):
+                            self.model.weights[d][j] -= self.lr * feat[d] * grad_logits[j]
+                    for j in range(self.model.num_classes):
+                        self.model.bias[j] -= self.lr * grad_logits[j]
+
+                train_loss = total_loss / max(1, len(y_train))
+                train_loss_history.append(round(train_loss, 4))
+
+                if X_val and y_val:
+                    val_loss, val_acc, _ = self.evaluate(X_val, y_val)
+                    val_loss_history.append(round(val_loss, 4))
+                    val_acc_history.append(round(val_acc, 2))
+                    if val_acc > best_val_acc:
+                        best_val_acc = val_acc
+                        best_epoch = epoch
+                        best_path = os.path.join(checkpoint_dir or "models", "checkpoint_best.pt")
+                        best_checkpoint_path = self.model.save_checkpoint(
+                            best_path, epoch=epoch, val_accuracy=val_acc
+                        )
 
         elapsed_sec = time.time() - start_time
         final_train_loss, final_train_acc, _ = self.evaluate(X_train, y_train)
 
-        # Save final model
         final_path = os.path.join(checkpoint_dir or "models", "model_final.pt")
         self.model.save_checkpoint(
             final_path,
@@ -174,7 +198,6 @@ class VFMFineTuner:
         }
 
     def train_custom_dataset(self, X: List[List[float]], y: List[int], epochs: int = 20) -> Dict[str, Any]:
-        """Backward-compatible train method."""
         res = self.train_with_validation(X, y, epochs=epochs)
         return {
             "k_shot": res["k_shot"],

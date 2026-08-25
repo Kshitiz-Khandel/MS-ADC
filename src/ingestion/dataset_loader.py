@@ -1,5 +1,6 @@
 import os
 import random
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 from PIL import Image
@@ -15,12 +16,14 @@ DIE_DEFECT_CLASSES = [
 
 class PCBDefectDatasetLoader:
     """
-    Ingests and organizes raw optical microscopy micrographs from the Kaggle PCB Defect dataset.
-    Normalizes image sizes (224x224 RGB) and splits them into Train, Validation, and Test sets.
+    Ingests and organizes optical microscopy micrographs from the Kaggle PCB Defect dataset.
+    Extracts high-resolution localized defect patches (ROI) using bounding box annotations
+    and normalizes image sizes (224x224 RGB) for few-shot Vision Foundation Model inspection.
     """
-    def __init__(self, data_dir: Optional[Path] = None, target_size: Tuple[int, int] = (224, 224)):
+    def __init__(self, data_dir: Optional[Path] = None, target_size: Tuple[int, int] = (224, 224), crop_padding: int = 40):
         self.data_dir = data_dir or (Path(__file__).parent.parent.parent / "data" / "pcb_dataset")
         self.target_size = target_size
+        self.crop_padding = crop_padding
         self.classes = DIE_DEFECT_CLASSES
 
     def discover_image_files(self) -> Dict[str, List[Path]]:
@@ -52,9 +55,47 @@ class PCBDefectDatasetLoader:
 
         return discovered
 
+    def find_annotation_xml(self, image_path: Path) -> Optional[Path]:
+        """Locates corresponding Pascal VOC XML annotation file for given image."""
+        # Check standard Kaggle hierarchy: PCB_DATASET/Annotations/<Class>/<stem>.xml
+        parent_class = image_path.parent.name
+        candidates = [
+            image_path.parents[1] / "Annotations" / parent_class / f"{image_path.stem}.xml",
+            image_path.parents[2] / "Annotations" / parent_class / f"{image_path.stem}.xml",
+            image_path.parent / f"{image_path.stem}.xml",
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+        return None
+
     def load_and_preprocess_image(self, image_path: Path) -> Image.Image:
-        """Loads and converts image to standard 224x224 RGB PIL image."""
+        """
+        Loads optical micrograph and crops the high-resolution localized defect patch (ROI).
+        If bounding box annotation exists, crops the defect region with padding.
+        Returns standardized 224x224 RGB image patch.
+        """
         img = Image.open(image_path).convert("RGB")
+        xml_path = self.find_annotation_xml(image_path)
+
+        if xml_path and xml_path.exists():
+            try:
+                tree = ET.parse(xml_path)
+                root = tree.getroot()
+                obj = root.find("object")
+                if obj is not None:
+                    bndbox = obj.find("bndbox")
+                    if bndbox is not None:
+                        xmin = max(0, int(bndbox.find("xmin").text) - self.crop_padding)
+                        ymin = max(0, int(bndbox.find("ymin").text) - self.crop_padding)
+                        xmax = min(img.width, int(bndbox.find("xmax").text) + self.crop_padding)
+                        ymax = min(img.height, int(bndbox.find("ymax").text) + self.crop_padding)
+                        
+                        if xmax > xmin and ymax > ymin:
+                            img = img.crop((xmin, ymin, xmax, ymax))
+            except Exception:
+                pass
+
         return img.resize(self.target_size, Image.Resampling.BILINEAR)
 
     def get_stratified_split(
