@@ -1,7 +1,10 @@
+import os
 import unittest
+from pathlib import Path
 from src.ingestion.wafer_loader import WM811KWaferLoader
 from src.ingestion.micro_batcher import DynamicMicroBatcher
 from src.ingestion.augmentor import CleanroomDataAugmentor
+from src.ingestion.dataset_loader import PCBDefectDatasetLoader
 from src.models.die_vfm import DieVFMClassifier, DIE_DEFECT_CLASSES
 from src.models.base import DefectClassifierInterface
 from src.models.fine_tune_vfm import VFMFineTuner
@@ -65,6 +68,23 @@ class TestVisionAndIngestionSuite(unittest.TestCase):
         self.assertEqual(res["total_samples"], 60)
         self.assertLess(res["final_loss"], res["loss_history"][0])
         self.assertGreaterEqual(res["accuracy_pct"], 90.0)
+
+    def test_checkpoint_save_and_load(self):
+        ckpt_path = "models/test_checkpoint.pt"
+        saved_path = self.classifier.save_checkpoint(ckpt_path, epoch=5, val_accuracy=98.5)
+        self.assertTrue(os.path.exists(saved_path))
+
+        new_classifier = DieVFMClassifier()
+        metadata = new_classifier.load_checkpoint(saved_path)
+        self.assertIsNotNone(metadata)
+        if os.path.exists(saved_path):
+            os.remove(saved_path)
+
+    def test_dataset_loader_stratified_split(self):
+        loader = PCBDefectDatasetLoader()
+        train_s, val_s, test_s = loader.get_stratified_split(k_shot_train=5, val_ratio=0.2)
+        self.assertIn("missing_hole", train_s)
+        self.assertIn("spurious_copper", train_s)
 
     def test_tensorrt_fp16_export_and_latency_sla(self):
         onnx_res = self.exporter.export_onnx("models/test.onnx")
