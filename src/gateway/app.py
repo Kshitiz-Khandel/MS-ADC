@@ -26,7 +26,7 @@ app.include_router(v1_router)
 @app.get("/healthz", response_model=HealthCheckResponse, tags=["System Health"])
 async def health_check():
     """
-    Liveness and readiness probe for Cloud Run autoscaling health monitor (Comp 18).
+    Liveness and readiness probe for Cloud Run autoscaling health monitor.
     """
     return {
         "status": "HEALTHY",

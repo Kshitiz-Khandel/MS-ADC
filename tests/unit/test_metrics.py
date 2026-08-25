@@ -1,5 +1,6 @@
 import unittest
 from src.utils.metrics import SemiconductorYieldCalculator
+from src.models.die_vfm import DIE_DEFECT_CLASSES
 
 class TestSemiconductorMetricsSuite(unittest.TestCase):
     def test_defect_density_calculation(self):
@@ -36,6 +37,20 @@ class TestSemiconductorMetricsSuite(unittest.TestCase):
         self.assertEqual(SemiconductorYieldCalculator.calculate_escaped_defect_rate(0, 50), 0.0)
         self.assertAlmostEqual(SemiconductorYieldCalculator.calculate_escaped_defect_rate(5, 50), 0.10, places=4)
         self.assertEqual(SemiconductorYieldCalculator.calculate_escaped_defect_rate(5, 0), 0.0)
+
+    def test_classification_metrics_and_report(self):
+        y_true = [0, 1, 2, 3, 4, 5, 0, 1]
+        y_pred = [0, 1, 2, 3, 4, 5, 0, 0] # One misprediction on index 7 (true 1, pred 0)
+        metrics = SemiconductorYieldCalculator.calculate_classification_metrics(y_true, y_pred, DIE_DEFECT_CLASSES)
+        
+        self.assertEqual(metrics["total_samples"], 8)
+        self.assertAlmostEqual(metrics["accuracy"], 7 / 8, places=3)
+        self.assertIn("missing_hole", metrics["classes"])
+        self.assertEqual(len(metrics["confusion_matrix"]), len(DIE_DEFECT_CLASSES))
+
+        report_str = SemiconductorYieldCalculator.format_classification_report(metrics)
+        self.assertIn("missing_hole", report_str)
+        self.assertIn("Accuracy", report_str)
 
 if __name__ == "__main__":
     unittest.main()

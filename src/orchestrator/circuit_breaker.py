@@ -9,8 +9,8 @@ class CircuitState(Enum):
 
 class CircuitBreaker:
     """
-    Protects downstream systems from cascading failures and timeouts (Comp 21).
-    Falls back to fast edge models if primary multimodal VLM SLA (>2.5s) is breached.
+    Protects downstream fab microservices from cascading failures and timeouts.
+    Transitions through CLOSED -> OPEN -> HALF-OPEN states based on consecutive errors.
     """
     def __init__(self, failure_threshold: int = 3, recovery_time_s: float = 5.0):
         self.failure_threshold = failure_threshold

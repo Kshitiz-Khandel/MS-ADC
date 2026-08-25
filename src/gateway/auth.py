@@ -3,7 +3,8 @@ from typing import Optional
 
 def verify_cleanroom_token(authorization: Optional[str] = Header(None)) -> str:
     """
-    Validates Bearer token / IAM Service Account identity on incoming requests (Comp 13).
+    Validates Bearer token / IAM Service Account identity on incoming metrology requests.
+    Enforces least-privilege role boundaries across fab microservices.
     """
     if not authorization:
         # In sandbox mode, allow fallback with guest identity

@@ -8,7 +8,7 @@ from src.rag.cache import SemanticRAGCache
 class FMEARetriever:
     """
     Retrieves matching FMEA troubleshooting SOPs using semantic similarity and keyword relevance.
-    Backed by SemanticRAGCache for sub-millisecond response latency (Comp 24).
+    Backed by SemanticRAGCache for sub-millisecond response latency.
     """
     def __init__(self, corpus_dir: Optional[Path] = None, cache: Optional[SemanticRAGCache] = None):
         self.corpus_dir = corpus_dir or (Path(__file__).parent.parent.parent / "data" / "fmea_corpus")

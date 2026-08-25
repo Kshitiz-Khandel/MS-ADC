@@ -7,8 +7,8 @@ from typing import Dict, Any
 
 class FabWebhookDispatcher:
     """
-    Dispatches asynchronous real-time excursion alert webhooks to fab MES dashboards (Comp 32).
-    Includes HMAC-SHA256 signature verification headers.
+    Dispatches asynchronous real-time excursion alert webhooks to fab MES dashboards.
+    Signs payloads using HMAC-SHA256 to ensure payload integrity.
     """
     def __init__(self, secret_key: str = "webhook-secret-key-300mm"):
         self.secret_key = secret_key

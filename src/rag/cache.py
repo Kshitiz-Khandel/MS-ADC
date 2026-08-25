@@ -4,8 +4,8 @@ from typing import Any, Dict, Optional
 
 class SemanticRAGCache:
     """
-    High-performance in-memory semantic cache for RAG embeddings and retrieved FMEA chunks.
-    Reduces latency from ~350ms to <1ms and cuts Vertex AI Vector Search query costs (Comp 24).
+    High-speed semantic caching layer for cleanroom FMEA document embeddings.
+    Reduces repeated retrieval latency from ~350ms to <1ms.
     """
     def __init__(self, max_size: int = 1000, ttl_seconds: int = 3600):
         self.max_size = max_size

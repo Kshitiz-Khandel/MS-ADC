@@ -3,8 +3,8 @@ from typing import Tuple
 
 class PromptGuard:
     """
-    Protects multi-agent reasoning from prompt injection, adversarial overrides,
-    and corrupted payload attacks (Comp 16).
+    Sanitizes natural language engineer tickets and notes against adversarial prompt injections
+    and malformed payload attacks.
     """
     INJECTION_PATTERNS = [
         r"ignore\s+(all\s+)?(previous|prior)\s+instructions",
