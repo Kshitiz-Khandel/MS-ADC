@@ -229,7 +229,7 @@ def evaluate_wafer_vlm_schema_and_fmea():
 
 def run_yield_kpi_verification():
     """Verifies semiconductor domain math (Murphy, Seeds, Defect Density, EDR)."""
-    print("\n[4/4] Verifying Semiconductor Metrology Domain Mathematics (Comp 5)...")
+    print("\n[4/4] Verifying Semiconductor Metrology Domain Mathematics...")
     
     murphy_y = SemiconductorYieldCalculator.calculate_murphy_yield(die_area_cm2=1.5, defect_density_d0=0.5)
     seeds_y = SemiconductorYieldCalculator.calculate_seeds_yield(die_area_cm2=1.5, defect_density_d0=0.5)

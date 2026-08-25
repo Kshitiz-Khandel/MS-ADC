@@ -4,8 +4,8 @@ from typing import List, Dict, Any, Tuple, Optional
 
 class CleanroomDataAugmentor:
     """
-    Applies extreme-imbalance class augmentation (Comp 5) for semiconductor die micrographs and wafer maps.
-    Synthesizes realistic minority defect variations to prevent model overfitting on sparse excursion events.
+    Applies minority-class synthetic data augmentation for semiconductor die micrographs and wafer maps.
+    Synthesizes realistic defect variations to prevent model overfitting on sparse excursion events.
     """
     def __init__(self, rotation_angles: Optional[List[int]] = None):
         self.rotation_angles = rotation_angles or [0, 90, 180, 270]

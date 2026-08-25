@@ -17,7 +17,7 @@ class DieVFMClassifier(DefectClassifierInterface):
     """
     Few-Shot Vision Foundation Model (NV-DINOv2 ViT-B/14 Backbone + Linear Classification Head).
     Performs sub-micron physical line defect classification at <50ms edge latency.
-    Adheres to DefectClassifierInterface for modularity (Comp 29).
+    Adheres to DefectClassifierInterface for modularity and extensible deployment.
     """
     def __init__(self, num_classes: int = 6, embedding_dim: int = 768, weights_path: Optional[str] = None):
         self.num_classes = num_classes

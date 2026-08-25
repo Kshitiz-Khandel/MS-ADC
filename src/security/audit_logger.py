@@ -8,7 +8,8 @@ logger.setLevel(logging.INFO)
 
 class MetrologyAuditLogger:
     """
-    Generates tamper-evident, structured audit events formatted for Google Cloud Logging (Comp 17).
+    Generates tamper-evident, structured audit events formatted for Google Cloud Logging.
+    Captures full metrology transaction traces for quality compliance.
     """
     @staticmethod
     def log_inspection_event(

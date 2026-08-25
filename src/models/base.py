@@ -3,8 +3,8 @@ from typing import Dict, Any, List, Optional
 
 class DefectClassifierInterface(abc.ABC):
     """
-    Abstract interface for automated defect classification specialists (Comp 29).
-    Enables seamless swapping between PyTorch, TensorRT, Triton, and cloud inference endpoints.
+    Abstract interface for automated semiconductor defect classification models.
+    Enables plug-and-play swapping between PyTorch, TensorRT, Triton, and cloud inference endpoints.
     """
 
     @abc.abstractmethod

@@ -4,11 +4,6 @@ MS-ADC Vertex AI Workbench Training Pipeline
 ---------------------------------------------
 Trains the few-shot linear classifier probe on top of frozen NVIDIA NV-DINOv2 (ViT-B/14)
 representations using optical micrographs from the Kaggle PCB-defects dataset.
-
-Competencies Demonstrated:
-- Comp 2 (Data Ingestion & Preprocessing - Kaggle PCB Optical Micrographs)
-- Comp 3 (Model Selection & Tuning - NV-DINOv2 Few-Shot Linear Probe)
-- Comp 23 (Resource Efficiency - ONNX / TensorRT FP16 Export)
 """
 
 import os

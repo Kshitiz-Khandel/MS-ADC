@@ -3,8 +3,8 @@ from typing import Dict, Any, List
 
 class SemiconductorYieldCalculator:
     """
-    Domain math library (Comp 5) translating defect classifications and metrology
-    indicators into actionable business and engineering yields.
+    Semiconductor cleanroom yield and metrology analytics calculator.
+    Translates defect classifications and metrology indicators into actionable engineering metrics.
     """
 
     @staticmethod
