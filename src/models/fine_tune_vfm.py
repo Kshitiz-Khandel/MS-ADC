@@ -33,6 +33,8 @@ class VFMFineTuner:
         """Executes one SGD epoch over linear head weights."""
         total_loss = 0.0
         num_samples = len(y)
+        if num_samples == 0:
+            return 0.0
         
         for i in range(num_samples):
             feat = X[i]
@@ -58,10 +60,9 @@ class VFMFineTuner:
             
         return float(total_loss / num_samples)
 
-    def run_training(self, k_shot: int = 10, epochs: int = 15) -> Dict[str, Any]:
+    def train_custom_dataset(self, X: List[List[float]], y: List[int], epochs: int = 20) -> Dict[str, Any]:
+        """Trains linear probe on real extracted representations."""
         start_time = time.time()
-        X, y = self.generate_few_shot_data(k_shot=k_shot)
-        
         loss_history = []
         for epoch in range(epochs):
             avg_loss = self.train_epoch(X, y)
@@ -69,21 +70,24 @@ class VFMFineTuner:
             
         elapsed_sec = time.time() - start_time
         
-        # Compute final accuracy
         correct = 0
         for i in range(len(y)):
             logits = self.model.predict_logits(X[i])
             pred = logits.index(max(logits))
             if pred == y[i]:
                 correct += 1
-        accuracy = float(correct / len(y)) * 100.0
+        accuracy = float(correct / max(1, len(y))) * 100.0
         
         return {
-            "k_shot": k_shot,
+            "k_shot": len(y) // max(1, len(DIE_DEFECT_CLASSES)),
             "total_samples": len(y),
             "epochs": epochs,
-            "final_loss": loss_history[-1],
+            "final_loss": loss_history[-1] if loss_history else 0.0,
             "accuracy_pct": round(accuracy, 2),
             "training_time_sec": round(elapsed_sec, 3),
             "loss_history": loss_history
         }
+
+    def run_training(self, k_shot: int = 10, epochs: int = 15) -> Dict[str, Any]:
+        X, y = self.generate_few_shot_data(k_shot=k_shot)
+        return self.train_custom_dataset(X, y, epochs=epochs)
