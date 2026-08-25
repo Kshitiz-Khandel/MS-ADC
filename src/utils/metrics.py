@@ -1,3 +1,4 @@
+import os
 import math
 from typing import Dict, Any, List, Tuple, Optional
 
@@ -157,3 +158,115 @@ class SemiconductorYieldCalculator:
         lines.append(f"{'Weighted Avg':<18} {w_p:<10} {w_r:<10} {w_f:<10} {total_s:<8}")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def save_confusion_matrix_plot(cm: List[List[int]], class_names: List[str], output_path: str):
+        """Generates and saves a high-resolution Confusion Matrix heatmap image."""
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import numpy as np
+
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            cm_arr = np.array(cm)
+
+            fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+            cax = ax.matshow(cm_arr, cmap="Blues", alpha=0.85)
+
+            for (i, j), val in np.ndenumerate(cm_arr):
+                color = "white" if val > cm_arr.max() / 2 else "black"
+                ax.text(j, i, f"{val}", ha="center", va="center", color=color, fontweight="bold", fontsize=11)
+
+            fig.colorbar(cax)
+            ax.set_xticks(range(len(class_names)))
+            ax.set_yticks(range(len(class_names)))
+            ax.set_xticklabels(class_names, rotation=35, ha="left", fontsize=9)
+            ax.set_yticklabels(class_names, fontsize=9)
+            ax.set_xlabel("Predicted Defect Class", fontweight="bold", labelpad=10)
+            ax.set_ylabel("Actual Ground Truth Class", fontweight="bold", labelpad=10)
+            ax.set_title("MS-ADC Metrology Defect Confusion Matrix", fontweight="bold", pad=20)
+            plt.tight_layout()
+            plt.savefig(output_path, bbox_inches="tight")
+            plt.close()
+        except Exception as e:
+            print(f"Warning: Could not save confusion matrix plot ({e})")
+
+    @staticmethod
+    def save_loss_accuracy_curves(history: List[Dict[str, Any]], output_path: str):
+        """Generates and saves dual-axis Loss and Accuracy vs. Epoch learning curves."""
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            epochs = [h["epoch"] for h in history]
+            train_loss = [h["train_loss"] for h in history]
+            val_loss = [h["val_loss"] for h in history]
+            train_acc = [h["train_accuracy"] * 100 for h in history]
+            val_acc = [h["val_accuracy"] * 100 for h in history]
+
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5), dpi=300)
+
+            # Loss Subplot
+            ax1.plot(epochs, train_loss, "o-", label="Train Loss", color="#1f77b4", linewidth=2)
+            ax1.plot(epochs, val_loss, "s--", label="Val Loss", color="#ff7f0e", linewidth=2)
+            ax1.set_xlabel("Epoch", fontweight="bold")
+            ax1.set_ylabel("Cross-Entropy Loss", fontweight="bold")
+            ax1.set_title("Training & Validation Loss Curve", fontweight="bold")
+            ax1.grid(True, linestyle=":", alpha=0.6)
+            ax1.legend()
+
+            # Accuracy Subplot
+            ax2.plot(epochs, train_acc, "o-", label="Train Accuracy", color="#2ca02c", linewidth=2)
+            ax2.plot(epochs, val_acc, "s--", label="Val Accuracy", color="#d62728", linewidth=2)
+            ax2.set_xlabel("Epoch", fontweight="bold")
+            ax2.set_ylabel("Accuracy (%)", fontweight="bold")
+            ax2.set_title("Training & Validation Accuracy Curve", fontweight="bold")
+            ax2.grid(True, linestyle=":", alpha=0.6)
+            ax2.legend()
+
+            plt.suptitle("MS-ADC Deep Vision Metrology Training Progression", fontweight="bold", fontsize=14)
+            plt.tight_layout()
+            plt.savefig(output_path, bbox_inches="tight")
+            plt.close()
+        except Exception as e:
+            print(f"Warning: Could not save loss/accuracy plot ({e})")
+
+    @staticmethod
+    def save_precision_recall_f1_chart(class_metrics: Dict[str, Dict[str, Any]], output_path: str):
+        """Generates grouped bar chart comparing Precision, Recall, and F1 across all defect classes."""
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import numpy as np
+
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            classes = list(class_metrics.keys())
+            precisions = [class_metrics[c]["precision"] * 100 for c in classes]
+            recalls = [class_metrics[c]["recall"] * 100 for c in classes]
+            f1s = [class_metrics[c]["f1_score"] * 100 for c in classes]
+
+            x = np.arange(len(classes))
+            width = 0.25
+
+            fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
+            ax.bar(x - width, precisions, width, label="Precision", color="#4285F4")
+            ax.bar(x, recalls, width, label="Recall", color="#34A853")
+            ax.bar(x + width, f1s, width, label="F1-Score", color="#FBBC05")
+
+            ax.set_ylabel("Percentage (%)", fontweight="bold")
+            ax.set_title("Defect Classification Performance by Class (Precision / Recall / F1)", fontweight="bold")
+            ax.set_xticks(x)
+            ax.set_xticklabels(classes, rotation=20, ha="right", fontsize=9)
+            ax.set_ylim(0, 105)
+            ax.grid(axis="y", linestyle=":", alpha=0.6)
+            ax.legend()
+
+            plt.tight_layout()
+            plt.savefig(output_path, bbox_inches="tight")
+            plt.close()
+        except Exception as e:
+            print(f"Warning: Could not save PR/F1 chart ({e})")

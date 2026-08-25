@@ -129,6 +129,7 @@ def run_workbench_training(
     train_loss_history = []
     val_loss_history = []
     val_acc_history = []
+    epoch_history = []
 
     best_val_acc = -1.0
     best_val_loss = float("inf")
@@ -188,6 +189,13 @@ def run_workbench_training(
         train_loss_history.append(round(train_loss, 4))
         val_loss_history.append(round(val_loss, 4))
         val_acc_history.append(round(val_acc, 2))
+        epoch_history.append({
+            "epoch": epoch,
+            "train_loss": round(train_loss, 4),
+            "train_accuracy": round(train_acc / 100.0, 4),
+            "val_loss": round(val_loss, 4),
+            "val_accuracy": round(val_acc / 100.0, 4)
+        })
 
         # Check for best model improvement
         status_msg = ""
@@ -246,10 +254,34 @@ def run_workbench_training(
     print(f"   TensorRT FP16 Latency: {trt_res['benchmarks']['tensorrt_fp16_latency_ms']} ms")
     print(f"   TensorRT Speedup Factor: {trt_res['benchmarks']['speedup_factor']}x")
 
+    # Step 6: Generate Performance Visualizations & Charts
+    print("\n📈 Generating Evaluation Plots & Performance Charts...")
+    cm_plot_path = os.path.join(output_dir, "confusion_matrix.png")
+    curve_plot_path = os.path.join(output_dir, "loss_accuracy_curve.png")
+    prf1_plot_path = os.path.join(output_dir, "precision_recall_f1.png")
+
+    SemiconductorYieldCalculator.save_confusion_matrix_plot(
+        cm=eval_metrics["confusion_matrix"],
+        class_names=DIE_DEFECT_CLASSES,
+        output_path=cm_plot_path
+    )
+    SemiconductorYieldCalculator.save_loss_accuracy_curves(
+        history=epoch_history,
+        output_path=curve_plot_path
+    )
+    SemiconductorYieldCalculator.save_precision_recall_f1_chart(
+        class_metrics=eval_metrics["classes"],
+        output_path=prf1_plot_path
+    )
+    print("   • Saved Confusion Matrix Heatmap: models/confusion_matrix.png")
+    print("   • Saved Loss/Accuracy Curves:    models/loss_accuracy_curve.png")
+    print("   • Saved Precision/Recall/F1 Bar: models/precision_recall_f1.png")
+
     # Save metrics JSON & instructions
     metrics_file = os.path.join(output_dir, "training_metrics.json")
     with open(metrics_file, "w") as f:
         json.dump({
+            "epoch_history": epoch_history,
             "train_loss_history": train_loss_history,
             "val_loss_history": val_loss_history,
             "val_acc_history": val_acc_history,
@@ -265,6 +297,7 @@ def run_workbench_training(
     print(f"   • Training Metrics: {metrics_file}")
     print(f"   • ONNX Graph: {onnx_path}")
     print(f"   • TensorRT Engine: {engine_path}")
+    print(f"   • Plots: confusion_matrix.png, loss_accuracy_curve.png, precision_recall_f1.png")
     print(f"\n☁️ GCS Cloud Staging Command:")
     print(f"   `gsutil -m cp -r {output_dir}/* gs://{gcs_bucket}/models/`")
 

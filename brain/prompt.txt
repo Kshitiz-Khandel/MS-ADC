@@ -1,0 +1,9 @@
+i want you to make a detiled plan for the project. understand the project and all its resources mentioned in brain/MS-ADC Capstone Project Plan.pdf 
+this is a collaborative project between me and kshitiz . the collaboration plan is mentioned in brain/collaboration_pr_roadmap.md and this is the directory structure we agreed to brain/proposed_directory_structure.md
+
+
+
+so let me know what to create for the 2nd pr so that i can show at least 4-5 git commits as the contribution .
+fyi kshitiz has done some commits at https://github.com/Kshitiz-Khandel/MS-ADC/pull/1. 
+
+
