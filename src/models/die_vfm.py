@@ -2,10 +2,9 @@ import os
 import json
 import math
 import random
-import hashlib
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
-from PIL import Image, ImageOps, ImageFilter
+from typing import Dict, Any, List, Optional, Union, Tuple
+from PIL import Image
 from src.models.base import DefectClassifierInterface
 
 DIE_DEFECT_CLASSES = [
@@ -19,97 +18,115 @@ DIE_DEFECT_CLASSES = [
 
 class DieVFMClassifier(DefectClassifierInterface):
     """
-    Few-Shot Vision Foundation Model (NV-DINOv2 ViT-B/14 Feature Extractor + Linear Classification Head).
-    Performs sub-micron physical line defect classification at <50ms edge latency.
-    Adheres to DefectClassifierInterface for modularity and extensible deployment.
+    Deep Vision Defect Classifier for Semiconductor and PCB Metrology.
+    Fine-tunes a deep vision backbone (ResNet18 / ViT) for sub-micron physical line defect classification.
     """
     def __init__(self, num_classes: int = 6, embedding_dim: int = 512, weights_path: Optional[str] = None):
         self.num_classes = num_classes
         self.embedding_dim = embedding_dim
         self.classes = DIE_DEFECT_CLASSES
-        self.torch_model = None
-        self.torch_backbone = None
         self.use_pytorch = False
+        self.torch_model = None
+        self.torch_head = None
 
-        # Initialize orthogonal class centroids for foundation manifold representations
-        self._init_foundation_manifold()
-        
         # Initialize linear head weights W in R^(embedding_dim x num_classes) and bias b in R^num_classes
         random.seed(42)
         self.weights = [[random.gauss(0, 0.01) for _ in range(num_classes)] for _ in range(embedding_dim)]
         self.bias = [0.0 for _ in range(num_classes)]
-        
-        # Setup PyTorch backend if available
+
+        # Try to initialize PyTorch deep neural network
         try:
             import torch
             import torch.nn as nn
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            import torchvision.models as models
+            
             self.torch = torch
             self.nn = nn
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             
-            # Setup PyTorch linear head
-            self.torch_head = nn.Linear(self.embedding_dim, self.num_classes)
+            # Backbone: ResNet18 pretrained on ImageNet
+            weights = models.ResNet18_Weights.DEFAULT
+            backbone = models.resnet18(weights=weights)
+            
+            # Unfreeze layer3 and layer4 for fine-tuning on metrology textures
+            for param in backbone.parameters():
+                param.requires_grad = False
+            for param in backbone.layer3.parameters():
+                param.requires_grad = True
+            for param in backbone.layer4.parameters():
+                param.requires_grad = True
+
+            # Classification head
+            self.torch_head = nn.Linear(512, self.num_classes)
+            backbone.fc = self.torch_head
+            
+            self.torch_model = backbone.to(self.device)
             self.use_pytorch = True
 
             if weights_path and os.path.exists(weights_path):
                 self.load_checkpoint(weights_path)
             else:
-                self.torch_head.to(self.device).eval()
-        except (ImportError, Exception):
+                self._sync_weights_from_head()
+        except Exception:
             self.use_pytorch = False
 
-    def _init_foundation_manifold(self):
-        """Initializes calibrated foundation model defect manifold centroids in embedding space."""
-        rng = random.Random(42)
-        self.centroids = []
-        for _ in range(self.num_classes):
-            c = [rng.gauss(0, 1.0) for _ in range(self.embedding_dim)]
-            norm = math.sqrt(sum(x**2 for x in c)) + 1e-8
-            self.centroids.append([x / norm for x in c])
+    def _sync_weights_from_head(self):
+        """Syncs PyTorch linear head parameters to CPU python lists."""
+        if self.use_pytorch and self.torch_head is not None:
+            with self.torch.no_grad():
+                self.weights = self.torch_head.weight.t().cpu().tolist()
+                self.bias = self.torch_head.bias.cpu().tolist()
 
-    def extract_features(self, image_data: Any, class_idx: Optional[int] = None) -> List[float]:
-        """
-        Extracts genuine visual embedding representation from optical micrograph patch.
-        Uses NV-DINOv2 calibrated foundation manifold representations.
-        """
-        # Determine image perceptual hash and characteristics
-        if isinstance(image_data, Image.Image):
-            img_bytes = image_data.resize((32, 32)).tobytes()
-            h_int = int.from_bytes(hashlib.sha256(img_bytes).digest()[:4], "big")
-            gray = image_data.convert("L")
-            mean_val = float(sum(gray.getdata()) / (gray.width * gray.height * 255.0))
-        elif isinstance(image_data, (bytes, bytearray)):
-            h_int = int.from_bytes(hashlib.sha256(image_data).digest()[:4], "big")
-            mean_val = 0.5
+    def extract_features(self, image: Image.Image) -> List[float]:
+        """Extracts 512-dim visual embedding from image using convolutional feature layers."""
+        if self.use_pytorch and self.torch_model is not None:
+            import torch
+            import torchvision.transforms as T
+            self.torch_model.eval()
+            transform = T.Compose([
+                T.Resize((224, 224)),
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+            tensor = transform(image.convert("RGB")).unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                x = self.torch_model.conv1(tensor)
+                x = self.torch_model.bn1(x)
+                x = self.torch_model.relu(x)
+                x = self.torch_model.maxpool(x)
+                x = self.torch_model.layer1(x)
+                x = self.torch_model.layer2(x)
+                x = self.torch_model.layer3(x)
+                x = self.torch_model.layer4(x)
+                x = self.torch_model.avgpool(x)
+                feat = torch.flatten(x, 1).squeeze(0).cpu().tolist()
+                norm = math.sqrt(sum(v**2 for v in feat)) + 1e-8
+                return [v / norm for v in feat]
         else:
-            h_int = random.randint(0, 2**31 - 1)
-            mean_val = 0.5
+            return [random.gauss(0, 0.05) for _ in range(self.embedding_dim)]
 
-        # If class index is specified (from dataset partition loader)
-        if class_idx is not None and 0 <= class_idx < self.num_classes:
-            target_centroid = self.centroids[class_idx]
-            rng = random.Random(h_int % (2**31 - 1))
-            noise = [rng.gauss(0, 0.12) for _ in range(self.embedding_dim)]
-            feat = [target_centroid[i] + noise[i] for i in range(self.embedding_dim)]
-            norm = math.sqrt(sum(x**2 for x in feat)) + 1e-8
-            return [x / norm for x in feat]
-
-        # General inference feature extraction from raw visual perceptual properties
-        rng = random.Random(h_int % (2**31 - 1))
-        base_noise = [rng.gauss(0, 1.0) for _ in range(self.embedding_dim)]
-        norm_noise = math.sqrt(sum(x**2 for x in base_noise)) + 1e-8
-        feat = [x / norm_noise for x in base_noise]
-        feat[0] = mean_val
-        norm = math.sqrt(sum(x**2 for x in feat)) + 1e-8
-        return [x / norm for x in feat]
-
-    def predict_logits(self, features: List[float]) -> List[float]:
-        """Linear probe projection: logits = W^T * z + b."""
-        logits = [0.0 for _ in range(self.num_classes)]
-        for j in range(self.num_classes):
-            dot = sum(features[i] * self.weights[i][j] for i in range(self.embedding_dim))
-            logits[j] = dot + self.bias[j]
-        return logits
+    def predict_logits(self, features_or_image: Any) -> List[float]:
+        """Runs forward pass to compute class logits."""
+        if self.use_pytorch and self.torch_model is not None and isinstance(features_or_image, Image.Image):
+            import torch
+            import torchvision.transforms as T
+            self.torch_model.eval()
+            transform = T.Compose([
+                T.Resize((224, 224)),
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+            tensor = transform(features_or_image.convert("RGB")).unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                logits = self.torch_model(tensor).squeeze(0).cpu().tolist()
+                return logits
+        elif isinstance(features_or_image, list):
+            logits = [0.0 for _ in range(self.num_classes)]
+            for j in range(self.num_classes):
+                dot = sum(features_or_image[i] * self.weights[i][j] for i in range(min(len(features_or_image), len(self.weights))))
+                logits[j] = dot + self.bias[j]
+            return logits
+        return [0.0] * self.num_classes
 
     def softmax(self, logits: List[float]) -> List[float]:
         max_l = max(logits)
@@ -124,81 +141,48 @@ class DieVFMClassifier(DefectClassifierInterface):
         val_accuracy: Optional[float] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Saves full model weights, configuration, and training metadata to disk."""
+        """Saves PyTorch state dict and training metadata."""
         checkpoint_path = str(checkpoint_path)
         os.makedirs(os.path.dirname(os.path.abspath(checkpoint_path)), exist_ok=True)
 
-        payload = {
-            "model_architecture": "NV-DINOv2-LinearProbe",
-            "num_classes": self.num_classes,
-            "embedding_dim": self.embedding_dim,
-            "classes": self.classes,
-            "weights": self.weights,
-            "bias": self.bias,
-            "epoch": epoch,
-            "val_accuracy": val_accuracy,
-            "metadata": metadata or {}
-        }
+        if self.use_pytorch and self.torch_model is not None:
+            import torch
+            self._sync_weights_from_head()
+            torch.save({
+                "epoch": epoch,
+                "val_accuracy": val_accuracy,
+                "model_state_dict": self.torch_model.state_dict(),
+                "metadata": metadata or {}
+            }, checkpoint_path)
+            return checkpoint_path
 
-        if self.use_pytorch and checkpoint_path.endswith((".pt", ".pth")):
-            try:
-                import torch
-                with torch.no_grad():
-                    w_tensor = torch.tensor(self.weights, dtype=torch.float32).t()
-                    b_tensor = torch.tensor(self.bias, dtype=torch.float32)
-                    self.torch_head.weight.copy_(w_tensor)
-                    self.torch_head.bias.copy_(b_tensor)
-
-                torch.save({
-                    "state_dict": self.torch_head.state_dict(),
-                    "epoch": epoch,
-                    "val_accuracy": val_accuracy,
-                    "metadata": payload
-                }, checkpoint_path)
-                return checkpoint_path
-            except Exception:
-                pass
-
-        json_path = checkpoint_path if checkpoint_path.endswith(".json") else f"{checkpoint_path}.json"
+        json_path = f"{checkpoint_path}.json" if not checkpoint_path.endswith(".json") else checkpoint_path
         with open(json_path, "w") as f:
-            json.dump(payload, f, indent=2)
+            json.dump({"epoch": epoch, "val_accuracy": val_accuracy, "metadata": metadata or {}}, f, indent=2)
         return json_path
 
     def load_checkpoint(self, checkpoint_path: Union[str, Path]) -> Dict[str, Any]:
-        """Loads model weights and metadata from a saved checkpoint."""
+        """Loads weights from disk."""
         checkpoint_path = str(checkpoint_path)
-        if not os.path.exists(checkpoint_path) and os.path.exists(f"{checkpoint_path}.json"):
-            checkpoint_path = f"{checkpoint_path}.json"
-
-        if self.use_pytorch and checkpoint_path.endswith((".pt", ".pth")):
+        if self.use_pytorch and self.torch_model is not None and os.path.exists(checkpoint_path):
+            import torch
             try:
-                import torch
                 ckpt = torch.load(checkpoint_path, map_location=self.device)
-                if isinstance(ckpt, dict) and "state_dict" in ckpt:
-                    self.torch_head.load_state_dict(ckpt["state_dict"])
-                    self.torch_head.eval()
-                    with torch.no_grad():
-                        self.weights = self.torch_head.weight.t().cpu().tolist()
-                        self.bias = self.torch_head.bias.cpu().tolist()
-                    return ckpt.get("metadata", {})
+                if "model_state_dict" in ckpt:
+                    self.torch_model.load_state_dict(ckpt["model_state_dict"])
+                    self.torch_model.eval()
+                    self._sync_weights_from_head()
+                return ckpt.get("metadata", {})
             except Exception:
                 pass
-
-        with open(checkpoint_path, "r") as f:
-            data = json.load(f)
-            self.weights = data.get("weights", self.weights)
-            self.bias = data.get("bias", self.bias)
-            return data
+        return {}
 
     def classify_patch(self, image_data: Any) -> Dict[str, Any]:
-        """Runs end-to-end inference over an optical die crop."""
-        feats = self.extract_features(image_data)
-        logits = self.predict_logits(feats)
+        """Classifies an optical die crop."""
+        logits = self.predict_logits(image_data)
         probs = self.softmax(logits)
-        
         pred_idx = probs.index(max(probs))
         confidence = float(probs[pred_idx])
-        
         return {
             "predicted_class": self.classes[pred_idx % len(self.classes)],
             "class_index": pred_idx,

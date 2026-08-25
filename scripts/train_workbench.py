@@ -2,15 +2,9 @@
 """
 MS-ADC Vertex AI Workbench Training Pipeline
 ---------------------------------------------
-Trains the few-shot linear classifier probe on top of NVIDIA NV-DINOv2 (ViT-B/14)
-representations using optical defect patches from the Kaggle PCB-defects dataset.
-
-Features:
-- Automated 3-way Stratified Splitting (Train: K-shot, Validation: 20%, Test: Held-out)
-- High-resolution ROI Defect Patch Extraction
-- Continuous Validation Monitoring & Best Model Checkpointing (`checkpoint_best.pt`)
-- Detailed Test Metrics (Per-class Precision, Recall, F1-Score, Confusion Matrix)
-- ONNX & TensorRT FP16 Compilation & GCS Artifact Staging
+End-to-end Deep Vision Foundation Model fine-tuning pipeline on the Kaggle PCB defect dataset.
+Fine-tunes a deep convolutional/vision backbone on localized optical defect patches (ROI)
+with real-time epoch metrics, validation monitoring, best checkpointing, and evaluation reporting.
 """
 
 import os
@@ -28,59 +22,42 @@ from PIL import Image
 ROOT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision.transforms as T
+import torchvision.models as models
+
 from src.models.die_vfm import DieVFMClassifier, DIE_DEFECT_CLASSES
-from src.models.fine_tune_vfm import VFMFineTuner
 from src.models.export_tensorrt import TensorRTExporter
 from src.ingestion.dataset_loader import PCBDefectDatasetLoader
 from src.utils.metrics import SemiconductorYieldCalculator
 
-def ensure_kaggle_dataset(data_dir: Path):
-    """Checks if dataset exists; if not, attempts automated download."""
-    loader = PCBDefectDatasetLoader(data_dir)
-    discovered = loader.discover_image_files()
-    total_found = sum(len(v) for v in discovered.values())
-    
-    if total_found == 0:
-        download_script = ROOT_DIR / "scripts" / "download_pcb_dataset.sh"
-        if download_script.exists():
-            print(f"📦 Dataset not found in {data_dir}. Running {download_script}...")
-            try:
-                subprocess.run(["bash", str(download_script)], check=True)
-            except Exception as e:
-                print(f"ℹ️ Direct download unavailable (e.g. private VPC). Falling back to feature simulator.")
-        else:
-            print(f"ℹ️ {download_script} not found, proceeding with feature simulator.")
-
 def run_workbench_training(
     k_shot: int = 10,
-    epochs: int = 30,
-    learning_rate: float = 0.02,
+    epochs: int = 25,
+    learning_rate: float = 0.001,
     val_ratio: float = 0.2,
+    batch_size: int = 16,
     output_dir: str = "models",
     gcs_bucket: str = "semicon-metrology-models",
     data_dir_path: str = "data/pcb_dataset"
 ) -> Dict[str, Any]:
-    print("=" * 78)
-    print("🚀 MS-ADC: Few-Shot Vision Foundation Model (NV-DINOv2) Training Pipeline")
+    print("=" * 82)
+    print("🚀 MS-ADC: Deep Vision Metrology Foundation Model Fine-Tuning Pipeline")
     print(f"Defect Classes ({len(DIE_DEFECT_CLASSES)}): {DIE_DEFECT_CLASSES}")
-    print(f"Few-Shot Support (K-Shot): {k_shot} samples per class")
-    print(f"Epochs: {epochs} | Learning Rate: {learning_rate} | Validation Ratio: {val_ratio * 100:.0f}%")
-    print("=" * 78)
+    print(f"Few-Shot Support (K-Shot): {k_shot} samples per class | Total Epochs: {epochs}")
+    print(f"Learning Rate: {learning_rate} | Validation Ratio: {val_ratio * 100:.0f}% | Batch Size: {batch_size}")
+    print("=" * 82)
 
     os.makedirs(output_dir, exist_ok=True)
     data_dir = ROOT_DIR / data_dir_path
-    ensure_kaggle_dataset(data_dir)
     
-    start_time = time.time()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"\n[1/5] Initializing Deep Vision Model on Device: {device}...")
 
-    # Step 1: Initialize Foundation Model Backbone
-    print("\n[1/6] Initializing frozen NV-DINOv2 (ViT-B/14) Feature Extractor...")
-    classifier = DieVFMClassifier(num_classes=len(DIE_DEFECT_CLASSES), embedding_dim=512)
-    print(f"      PyTorch Backend: {classifier.use_pytorch} | Device: {getattr(classifier, 'device', 'cpu')}")
-    print(f"      Neural Backbone: NVIDIA NV-DINOv2 (ViT-B/14 @ 512-dim)")
-
-    # Step 2: Ingest and Partition Dataset (Train / Val / Test)
-    print(f"\n[2/6] Ingesting optical dataset and creating 3-way Stratified Splits...")
+    # Step 1: Ingest optical defect dataset & create 3-way split
+    print(f"\n[2/5] Ingesting optical dataset and creating 3-way Stratified Splits...")
     loader = PCBDefectDatasetLoader(data_dir)
     train_paths, val_paths, test_paths = loader.get_stratified_split(k_shot_train=k_shot, val_ratio=val_ratio)
 
@@ -88,76 +65,176 @@ def run_workbench_training(
     total_val = sum(len(p) for p in val_paths.values())
     total_test = sum(len(p) for p in test_paths.values())
 
-    trainer = VFMFineTuner(classifier, learning_rate=learning_rate)
+    if total_train == 0:
+        print("⚠️ No images found in data directory. Please ensure pcb-defects.zip is extracted to data/pcb_dataset/")
+        return {"status": "FAILED", "error": "Dataset missing"}
 
-    if total_train > 0:
-        print(f"      • Training Set   (K={k_shot}-shot): {total_train} images")
-        print(f"      • Validation Set ({val_ratio*100:.0f}% split): {total_val} images")
-        print(f"      • Test Set       (Held-out):  {total_test} images")
+    print(f"      • Training Set   (K={k_shot}-shot): {total_train} images")
+    print(f"      • Validation Set ({val_ratio*100:.0f}% split): {total_val} images")
+    print(f"      • Test Set       (Held-out):  {total_test} images")
 
-        # Feature Extraction helper (extracts localized defect ROI patches)
-        def extract_split(paths_dict):
-            X, y = [], []
-            for class_idx, cls_name in enumerate(DIE_DEFECT_CLASSES):
-                for p in paths_dict.get(cls_name, []):
-                    img = loader.load_and_preprocess_image(p)
-                    feat = classifier.extract_features(img, class_idx=class_idx)
-                    X.append(feat)
-                    y.append(class_idx)
-            return X, y
+    print("\n      Pre-loading & cropping localized defect patches (ROI) into memory...")
+    def load_split_images(paths_dict):
+        items = []
+        for class_idx, cls_name in enumerate(DIE_DEFECT_CLASSES):
+            for p in paths_dict.get(cls_name, []):
+                img = loader.load_and_preprocess_image(p)
+                items.append((img, class_idx))
+        return items
 
-        print("      Extracting deep visual embeddings from localized defect patches...")
-        X_train, y_train = extract_split(train_paths)
-        X_val, y_val = extract_split(val_paths)
-        X_test, y_test = extract_split(test_paths)
+    train_imgs = load_split_images(train_paths)
+    val_imgs = load_split_images(val_paths)
+    test_imgs = load_split_images(test_paths)
 
-        # Step 3: Train Probe with Validation & Checkpointing
-        print(f"\n[3/6] Training linear classification probe with checkpointing...")
-        train_results = trainer.train_with_validation(
-            X_train, y_train,
-            X_val=X_val, y_val=y_val,
-            epochs=epochs,
-            checkpoint_dir=output_dir
-        )
-    else:
-        print("      • Dataset not found on disk: Running feature generator simulation...")
-        X_train, y_train = trainer.generate_few_shot_data(k_shot=k_shot)
-        X_val, y_val = trainer.generate_few_shot_data(k_shot=max(2, int(k_shot * val_ratio)))
-        X_test, y_test = trainer.generate_few_shot_data(k_shot=20)
+    # Data Augmentation Transforms for Cleanroom Metrology
+    transform_train = T.Compose([
+        T.RandomHorizontalFlip(),
+        T.RandomVerticalFlip(),
+        T.RandomRotation(15),
+        T.ColorJitter(brightness=0.15, contrast=0.15),
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
 
-        print(f"\n[3/6] Training linear classification probe with checkpointing...")
-        train_results = trainer.train_with_validation(
-            X_train, y_train,
-            X_val=X_val, y_val=y_val,
-            epochs=epochs,
-            checkpoint_dir=output_dir
-        )
+    transform_eval = T.Compose([
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
 
-    print(f"✅ Training completed in {train_results['training_time_sec']}s")
-    print(f"   Initial Loss: {train_results['train_loss_history'][0]} -> Final Loss: {train_results['final_train_loss']}")
-    print(f"   Best Validation Accuracy: {train_results['best_val_accuracy']}% (Epoch {train_results['best_epoch']})")
-    print(f"   Saved Checkpoint: {train_results['best_checkpoint_path']}")
+    # Pre-tensorize Validation & Test sets
+    X_val = torch.stack([transform_eval(img) for img, _ in val_imgs]).to(device)
+    y_val = torch.tensor([lbl for _, lbl in val_imgs], dtype=torch.long).to(device)
 
-    # Step 4: Final Test Set Evaluation
-    print(f"\n[4/6] Evaluating best checkpoint on held-out Test Set ({len(y_test)} samples)...")
-    if train_results["best_checkpoint_path"]:
-        classifier.load_checkpoint(train_results["best_checkpoint_path"])
+    X_test = torch.stack([transform_eval(img) for img, _ in test_imgs]).to(device)
+    y_test = torch.tensor([lbl for _, lbl in test_imgs], dtype=torch.long).to(device)
 
-    _, test_acc, test_predictions = trainer.evaluate(X_test, y_test)
+    # Step 2: Initialize ResNet18 Backbone & Head
+    classifier = DieVFMClassifier(num_classes=len(DIE_DEFECT_CLASSES))
+    model = classifier.torch_model
+
+    optimizer = optim.AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=learning_rate,
+        weight_decay=1e-3
+    )
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    criterion = nn.CrossEntropyLoss()
+
+    # Step 3: Real Training Loop with Detailed Epoch Metrics
+    print(f"\n[3/5] Starting Neural Network Training ({epochs} Epochs)...")
+    print("-" * 88)
+    print(f"{'Epoch':<10} | {'Train Loss':<12} | {'Train Acc':<11} | {'Val Loss':<11} | {'Val Acc':<10} | {'LR':<10} | {'Status'}")
+    print("-" * 88)
+
+    train_loss_history = []
+    val_loss_history = []
+    val_acc_history = []
+
+    best_val_acc = -1.0
+    best_val_loss = float("inf")
+    best_epoch = 0
+    best_checkpoint_path = os.path.join(output_dir, "checkpoint_best.pt")
+
+    start_train_time = time.time()
+
+    for epoch in range(1, epochs + 1):
+        model.train()
+        
+        # 6x data augmentation on the few-shot support set
+        aug_tensors, aug_labels = [], []
+        for img, lbl in train_imgs:
+            for _ in range(6):
+                aug_tensors.append(transform_train(img))
+                aug_labels.append(lbl)
+                
+        X_train_batch = torch.stack(aug_tensors).to(device)
+        y_train_batch = torch.tensor(aug_labels, dtype=torch.long).to(device)
+
+        # Mini-batch shuffle
+        perm = torch.randperm(X_train_batch.size(0))
+        epoch_loss = 0.0
+        correct = 0
+        total = 0
+
+        for i in range(0, X_train_batch.size(0), batch_size):
+            indices = perm[i:i + batch_size]
+            bx, by = X_train_batch[indices], y_train_batch[indices]
+
+            optimizer.zero_grad()
+            out = model(bx)
+            loss = criterion(out, by)
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item() * bx.size(0)
+            preds = out.argmax(dim=1)
+            correct += (preds == by).sum().item()
+            total += bx.size(0)
+
+        current_lr = scheduler.get_last_lr()[0]
+        scheduler.step()
+
+        train_loss = epoch_loss / total
+        train_acc = (correct / total) * 100.0
+
+        # Evaluate on real validation set
+        model.eval()
+        with torch.no_grad():
+            val_out = model(X_val)
+            val_loss = criterion(val_out, y_val).item()
+            val_preds = val_out.argmax(dim=1)
+            val_acc = (val_preds == y_val).float().mean().item() * 100.0
+
+        train_loss_history.append(round(train_loss, 4))
+        val_loss_history.append(round(val_loss, 4))
+        val_acc_history.append(round(val_acc, 2))
+
+        # Check for best model improvement
+        status_msg = ""
+        if val_acc > best_val_acc or (val_acc == best_val_acc and val_loss < best_val_loss):
+            best_val_acc = val_acc
+            best_val_loss = val_loss
+            best_epoch = epoch
+            torch.save({
+                "epoch": epoch,
+                "val_accuracy": val_acc,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+            }, best_checkpoint_path)
+            status_msg = "⭐ Best Model Saved"
+
+        print(f"Epoch [{epoch:02d}/{epochs:02d}] | {train_loss:<12.4f} | {train_acc:<10.1f}% | {val_loss:<11.4f} | {val_acc:<9.1f}% | {current_lr:<10.6f} | {status_msg}")
+
+    total_train_elapsed = round(time.time() - start_train_time, 2)
+    print("-" * 88)
+    print(f"✅ Training completed in {total_train_elapsed}s | Best Validation Accuracy: {best_val_acc:.2f}% (Epoch {best_epoch})")
+
+    # Step 4: Final Evaluation on Held-Out Test Set
+    print(f"\n[4/5] Evaluating best checkpoint on held-out Test Set ({total_test} samples)...")
+    if os.path.exists(best_checkpoint_path):
+        ckpt = torch.load(best_checkpoint_path, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+
+    model.eval()
+    with torch.no_grad():
+        test_out = model(X_test)
+        test_preds = test_out.argmax(dim=1).cpu().tolist()
+        y_test_list = y_test.cpu().tolist()
+
     eval_metrics = SemiconductorYieldCalculator.calculate_classification_metrics(
-        y_true=y_test,
-        y_pred=test_predictions,
+        y_true=y_test_list,
+        y_pred=test_preds,
         class_names=DIE_DEFECT_CLASSES
     )
 
-    print("\n" + "-" * 60)
+    print("\n" + "-" * 65)
     print("📊 CLASSIFICATION EVALUATION METRICS REPORT")
-    print("-" * 60)
+    print("-" * 65)
     print(SemiconductorYieldCalculator.format_classification_report(eval_metrics))
-    print("-" * 60)
+    print("-" * 65)
 
-    # Step 5: ONNX & TensorRT FP16 Compilation
-    print("\n[5/6] Compiling ONNX computation graph & TensorRT FP16 engine...")
+    # Step 5: ONNX & TensorRT Compilation
+    print("\n[5/5] Compiling ONNX computation graph & TensorRT FP16 engine...")
     exporter = TensorRTExporter(target_precision="FP16", max_batch_size=32)
     onnx_path = os.path.join(output_dir, "die_vfm.onnx")
     engine_path = os.path.join(output_dir, "die_vfm_fp16.engine")
@@ -169,39 +246,43 @@ def run_workbench_training(
     print(f"   TensorRT FP16 Latency: {trt_res['benchmarks']['tensorrt_fp16_latency_ms']} ms")
     print(f"   TensorRT Speedup Factor: {trt_res['benchmarks']['speedup_factor']}x")
 
-    # Step 6: Save Metrics JSON & GCS Cloud Staging
+    # Save metrics JSON & instructions
     metrics_file = os.path.join(output_dir, "training_metrics.json")
     with open(metrics_file, "w") as f:
         json.dump({
-            "train_results": train_results,
+            "train_loss_history": train_loss_history,
+            "val_loss_history": val_loss_history,
+            "val_acc_history": val_acc_history,
+            "best_val_accuracy": best_val_acc,
+            "best_epoch": best_epoch,
             "test_metrics": eval_metrics,
             "tensorrt_benchmarks": trt_res["benchmarks"],
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")
         }, f, indent=2)
 
-    print(f"\n[6/6] Staging metrology artifacts to gs://{gcs_bucket}/models/...")
-    print(f"   Saved local metrics to: {metrics_file}")
-    print(f"   Cloud Sync Command: `gsutil -m cp -r {output_dir}/* gs://{gcs_bucket}/models/`")
-
-    total_elapsed = round(time.time() - start_time, 2)
-    print("\n" + "=" * 78)
-    print(f"🎉 Few-Shot VFM Adaptation Pipeline Complete in {total_elapsed}s!")
-    print("=" * 78)
+    print(f"\n📦 Artifacts saved to local '{output_dir}/':")
+    print(f"   • Best Checkpoint: {best_checkpoint_path}")
+    print(f"   • Training Metrics: {metrics_file}")
+    print(f"   • ONNX Graph: {onnx_path}")
+    print(f"   • TensorRT Engine: {engine_path}")
+    print(f"\n☁️ GCS Cloud Staging Command:")
+    print(f"   `gsutil -m cp -r {output_dir}/* gs://{gcs_bucket}/models/`")
 
     return {
         "status": "SUCCESS",
-        "train_results": train_results,
+        "best_val_accuracy": best_val_acc,
         "test_metrics": eval_metrics,
         "tensorrt_benchmarks": trt_res["benchmarks"],
-        "total_elapsed_sec": total_elapsed
+        "training_time_sec": total_train_elapsed
     }
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train MS-ADC Few-Shot VFM Linear Head on Vertex AI Workbench")
+    parser = argparse.ArgumentParser(description="Train MS-ADC Vision Foundation Model on Vertex AI Workbench")
     parser.add_argument("--k-shot", type=int, default=10, help="Number of labeled training examples per defect class")
-    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.02, help="Learning rate for linear probe")
+    parser.add_argument("--epochs", type=int, default=25, help="Number of training epochs")
+    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for AdamW optimizer")
     parser.add_argument("--val-ratio", type=float, default=0.2, help="Validation split ratio of remaining dataset")
+    parser.add_argument("--batch-size", type=int, default=16, help="Mini-batch size for training")
     parser.add_argument("--output-dir", type=str, default="models", help="Directory to store exported checkpoints and models")
     parser.add_argument("--gcs-bucket", type=str, default="semicon-metrology-models", help="GCS bucket for model artifacts")
     parser.add_argument("--data-dir", type=str, default="data/pcb_dataset", help="Local directory containing Kaggle dataset")
@@ -212,6 +293,7 @@ if __name__ == "__main__":
         epochs=args.epochs,
         learning_rate=args.lr,
         val_ratio=args.val_ratio,
+        batch_size=args.batch_size,
         output_dir=args.output_dir,
         gcs_bucket=args.gcs_bucket,
         data_dir_path=args.data_dir
