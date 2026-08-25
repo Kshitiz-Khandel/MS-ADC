@@ -53,7 +53,7 @@ def ensure_kaggle_dataset(data_dir: Path):
 def run_workbench_training(
     k_shot: int = 10,
     epochs: int = 25,
-    learning_rate: float = 0.02,
+    learning_rate: float = 0.05,
     val_ratio: float = 0.2,
     output_dir: str = "models",
     gcs_bucket: str = "semicon-metrology-models",
@@ -76,6 +76,7 @@ def run_workbench_training(
     print("\n[1/6] Initializing frozen NV-DINOv2 (ViT-B/14) Feature Extractor...")
     classifier = DieVFMClassifier(num_classes=len(DIE_DEFECT_CLASSES), embedding_dim=768)
     print(f"      PyTorch Backend: {classifier.use_pytorch} | Device: {getattr(classifier, 'device', 'cpu')}")
+    print(f"      Neural Backbone: {type(classifier.torch_backbone).__name__ if classifier.torch_backbone else 'Deterministic Multi-Scale Spatial Gradient'}")
 
     # Step 2: Ingest and Partition Dataset (Train / Val / Test)
     print(f"\n[2/6] Ingesting optical dataset and creating 3-way Stratified Splits...")
@@ -93,17 +94,18 @@ def run_workbench_training(
         print(f"      • Validation Set ({val_ratio*100:.0f}% split): {total_val} images")
         print(f"      • Test Set       (Held-out):  {total_test} images")
 
-        # Feature Extraction helper
+        # Feature Extraction helper (pure image pixels, zero hints)
         def extract_split(paths_dict):
             X, y = [], []
             for class_idx, cls_name in enumerate(DIE_DEFECT_CLASSES):
                 for p in paths_dict.get(cls_name, []):
                     img = loader.load_and_preprocess_image(p)
-                    feat = classifier.extract_features(img, class_hint_idx=class_idx)
+                    feat = classifier.extract_features(img)
                     X.append(feat)
                     y.append(class_idx)
             return X, y
 
+        print("      Extracting deep feature embeddings across all partitions...")
         X_train, y_train = extract_split(train_paths)
         X_val, y_val = extract_split(val_paths)
         X_test, y_test = extract_split(test_paths)
@@ -197,7 +199,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train MS-ADC Few-Shot VFM Linear Head on Vertex AI Workbench")
     parser.add_argument("--k-shot", type=int, default=10, help="Number of labeled training examples per defect class")
     parser.add_argument("--epochs", type=int, default=25, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.02, help="Learning rate for linear probe")
+    parser.add_argument("--lr", type=float, default=0.05, help="Learning rate for linear probe")
     parser.add_argument("--val-ratio", type=float, default=0.2, help="Validation split ratio of remaining dataset")
     parser.add_argument("--output-dir", type=str, default="models", help="Directory to store exported checkpoints and models")
     parser.add_argument("--gcs-bucket", type=str, default="semicon-metrology-models", help="GCS bucket for model artifacts")
