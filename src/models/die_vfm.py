@@ -44,9 +44,16 @@ class DieVFMClassifier(DefectClassifierInterface):
             self.nn = nn
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             
-            # Backbone: ResNet18 pretrained on ImageNet
-            weights = models.ResNet18_Weights.DEFAULT
-            backbone = models.resnet18(weights=weights)
+            # Backbone: ResNet18 (with offline fallback for private VPCs)
+            try:
+                weights = models.ResNet18_Weights.DEFAULT
+                backbone = models.resnet18(weights=weights)
+            except Exception:
+                try:
+                    backbone = models.resnet18(pretrained=True)
+                except Exception:
+                    # Offline fallback: initialize without external download
+                    backbone = models.resnet18(weights=None)
             
             # Unfreeze layer3 and layer4 for fine-tuning on metrology textures
             for param in backbone.parameters():
