@@ -1,0 +1,38 @@
+steps:
+  # Stage 1: Static Analysis & Code Linting
+  - name: 'python:3.11-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install flake8
+        flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+  # Stage 2: Automated Unit & Security Test Suites
+  - name: 'python:3.11-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        python -m unittest discover -s tests/unit -v
+
+  # Stage 3: Automated Evaluation Benchmark & Quality Gate
+  - name: 'python:3.11-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        python src/evaluation/eval_pipeline.py
+
+  # Stage 4: Container Build & Push to Google Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/semicon-metrology/gateway:$COMMIT_SHA'
+      - '.'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/semicon-metrology/gateway:$COMMIT_SHA'
+
+timeout: '900s'

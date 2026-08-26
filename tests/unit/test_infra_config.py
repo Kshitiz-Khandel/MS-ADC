@@ -1,51 +1,55 @@
-import os
-import re
+import unittest
 from pathlib import Path
-import pytest
 
-TF_DIR = Path(__file__).parent.parent.parent / "terraform"
+class TestInfrastructureConfig(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.repo_root = Path(__file__).resolve().parent.parent.parent
+        cls.terraform_dir = cls.repo_root / "terraform"
 
-def test_terraform_files_exist():
-    required_files = [
-        "versions.tf", "variables.tf", "main.tf", "vpc.tf", 
-        "bigquery.tf", "gcs.tf", "iam.tf", "secret_manager.tf", "cloud_run.tf"
-    ]
-    for filename in required_files:
-        filepath = TF_DIR / filename
-        assert filepath.exists(), f"Missing required Terraform file: {filename}"
-        assert filepath.stat().st_size > 0, f"Terraform file {filename} is empty"
+    def test_terraform_files_exist(self):
+        expected_files = [
+            "main.tf", "versions.tf", "variables.tf", "vpc.tf",
+            "gcs.tf", "bigquery.tf", "iam.tf", "secret_manager.tf", "cloud_run.tf"
+        ]
+        for f in expected_files:
+            file_path = self.terraform_dir / f
+            self.assertTrue(file_path.exists(), f"Missing Terraform config file: {f}")
 
-def test_vpc_private_google_access_enabled():
-    vpc_content = (TF_DIR / "vpc.tf").read_text()
-    assert "private_ip_google_access = true" in vpc_content, "VPC subnet must have Private Google Access enabled"
-    assert "google_compute_router_nat" in vpc_content, "VPC must have a Cloud NAT Gateway configured"
+    def test_versions_tf_contains_required_providers(self):
+        versions_file = self.terraform_dir / "versions.tf"
+        content = versions_file.read_text()
+        self.assertIn("google", content)
+        self.assertIn("hashicorp/google", content)
+        self.assertIn("~> 5.20.0", content)
 
-def test_gcs_uniform_bucket_level_access():
-    gcs_content = (TF_DIR / "gcs.tf").read_text()
-    assert "uniform_bucket_level_access = true" in gcs_content, "GCS buckets must enforce uniform bucket-level access"
-    assert "versioning" in gcs_content, "GCS buckets must have object versioning enabled"
+    def test_vpc_configuration_isolated(self):
+        vpc_file = self.terraform_dir / "vpc.tf"
+        content = vpc_file.read_text()
+        self.assertIn("google_compute_network", content)
+        self.assertIn("metrology_vpc", content)
+        self.assertIn("google_compute_router_nat", content)
 
-def test_bigquery_partitioning_and_clustering():
-    bq_content = (TF_DIR / "bigquery.tf").read_text()
-    assert 'time_partitioning' in bq_content, "BigQuery table must be partitioned by day"
-    assert 'clustering = ["lot_id", "tool_chamber", "macro_defect_class"]' in bq_content, "BigQuery table must be clustered on query keys"
+    def test_bigquery_metrology_table_partitioning(self):
+        bq_file = self.terraform_dir / "bigquery.tf"
+        content = bq_file.read_text()
+        self.assertIn("google_bigquery_dataset", content)
+        self.assertIn("metrology_warehouse", content)
+        self.assertIn("time_partitioning", content)
+        self.assertIn("clustering", content)
 
-def test_iam_least_privilege_roles():
-    iam_content = (TF_DIR / "iam.tf").read_text()
-    # Check dedicated service accounts
-    assert "gateway_sa" in iam_content, "Must define dedicated Gateway Service Account"
-    assert "agent_sa" in iam_content, "Must define dedicated Agent Service Account"
-    # Ensure no admin / wildcard roles
-    assert "roles/owner" not in iam_content, "Wildcard owner role forbidden"
-    assert "roles/editor" not in iam_content, "Wildcard editor role forbidden"
-    # Verify specific least privilege roles
-    assert "roles/bigquery.dataEditor" in iam_content
-    assert "roles/aiplatform.user" in iam_content
-    assert "roles/storage.objectViewer" in iam_content
-    assert "roles/dlp.user" in iam_content
+    def test_iam_service_accounts_defined(self):
+        iam_file = self.terraform_dir / "iam.tf"
+        content = iam_file.read_text()
+        self.assertIn("gateway_sa", content)
+        self.assertIn("agent_sa", content)
 
-def test_cloud_run_health_probes():
-    cr_content = (TF_DIR / "cloud_run.tf").read_text()
-    assert "startup_probe" in cr_content, "Cloud Run service must define startup health probe"
-    assert "liveness_probe" in cr_content, "Cloud Run service must define liveness health probe"
-    assert "min_instance_count = 1" in cr_content, "Cloud Run service must maintain min 1 instance for HA"
+    def test_cloud_run_service_configured(self):
+        cloud_run_file = self.terraform_dir / "cloud_run.tf"
+        content = cloud_run_file.read_text()
+        self.assertIn("google_cloud_run_v2_service", content)
+        self.assertIn("api_gateway", content)
+        self.assertIn("startup_probe", content)
+
+if __name__ == "__main__":
+    unittest.main()

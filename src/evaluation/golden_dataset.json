@@ -1,0 +1,527 @@
+[
+  {
+    "test_case_id": "GOLDEN-EXCURSION-001",
+    "lot_id": "LOT-GOLDEN-101",
+    "chamber": "300mm_RIE_Etch_Chamber_3",
+    "input_ticket": "Lot-101 flagged excursion during inline inspection on 300mm_RIE_Etch_Chamber_3. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-101/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-101/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Center",
+      "micro_defect": "Short",
+      "expected_fmea_sop": "FMEA-SOP-ETCH-300-CH3",
+      "expected_root_cause_keywords": [
+        "RF match capacitor",
+        "Helium backside cooling",
+        "plasma non-uniformity"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-002",
+    "lot_id": "LOT-GOLDEN-102",
+    "chamber": "300mm_Immersion_Litho_Track_2",
+    "input_ticket": "Lot-102 flagged excursion during inline inspection on 300mm_Immersion_Litho_Track_2. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-102/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-102/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Scratch",
+      "micro_defect": "Open_circuit",
+      "expected_fmea_sop": "FMEA-SOP-LITHO-300-TRK2",
+      "expected_root_cause_keywords": [
+        "Wafer stage handling",
+        "photoresist collapse",
+        "focus drift"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-003",
+    "lot_id": "LOT-GOLDEN-103",
+    "chamber": "300mm_CMP_Platen_1",
+    "input_ticket": "Lot-103 flagged excursion during inline inspection on 300mm_CMP_Platen_1. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-103/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-103/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Edge-Loc",
+      "micro_defect": "Spurious_copper",
+      "expected_fmea_sop": "FMEA-SOP-CMP-300-PL1",
+      "expected_root_cause_keywords": [
+        "Retaining ring pressure",
+        "slurry contamination",
+        "platen speed"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-004",
+    "lot_id": "LOT-GOLDEN-104",
+    "chamber": "300mm_RIE_Etch_Chamber_3",
+    "input_ticket": "Lot-104 flagged excursion during inline inspection on 300mm_RIE_Etch_Chamber_3. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-104/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-104/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Center",
+      "micro_defect": "Short",
+      "expected_fmea_sop": "FMEA-SOP-ETCH-300-CH3",
+      "expected_root_cause_keywords": [
+        "RF match capacitor",
+        "Helium backside cooling",
+        "plasma non-uniformity"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-005",
+    "lot_id": "LOT-GOLDEN-105",
+    "chamber": "300mm_Immersion_Litho_Track_2",
+    "input_ticket": "Lot-105 flagged excursion during inline inspection on 300mm_Immersion_Litho_Track_2. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-105/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-105/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Scratch",
+      "micro_defect": "Open_circuit",
+      "expected_fmea_sop": "FMEA-SOP-LITHO-300-TRK2",
+      "expected_root_cause_keywords": [
+        "Wafer stage handling",
+        "photoresist collapse",
+        "focus drift"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-006",
+    "lot_id": "LOT-GOLDEN-106",
+    "chamber": "300mm_CMP_Platen_1",
+    "input_ticket": "Lot-106 flagged excursion during inline inspection on 300mm_CMP_Platen_1. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-106/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-106/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Edge-Loc",
+      "micro_defect": "Spurious_copper",
+      "expected_fmea_sop": "FMEA-SOP-CMP-300-PL1",
+      "expected_root_cause_keywords": [
+        "Retaining ring pressure",
+        "slurry contamination",
+        "platen speed"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-007",
+    "lot_id": "LOT-GOLDEN-107",
+    "chamber": "300mm_RIE_Etch_Chamber_3",
+    "input_ticket": "Lot-107 flagged excursion during inline inspection on 300mm_RIE_Etch_Chamber_3. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-107/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-107/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Center",
+      "micro_defect": "Short",
+      "expected_fmea_sop": "FMEA-SOP-ETCH-300-CH3",
+      "expected_root_cause_keywords": [
+        "RF match capacitor",
+        "Helium backside cooling",
+        "plasma non-uniformity"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-008",
+    "lot_id": "LOT-GOLDEN-108",
+    "chamber": "300mm_Immersion_Litho_Track_2",
+    "input_ticket": "Lot-108 flagged excursion during inline inspection on 300mm_Immersion_Litho_Track_2. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-108/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-108/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Scratch",
+      "micro_defect": "Open_circuit",
+      "expected_fmea_sop": "FMEA-SOP-LITHO-300-TRK2",
+      "expected_root_cause_keywords": [
+        "Wafer stage handling",
+        "photoresist collapse",
+        "focus drift"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-009",
+    "lot_id": "LOT-GOLDEN-109",
+    "chamber": "300mm_CMP_Platen_1",
+    "input_ticket": "Lot-109 flagged excursion during inline inspection on 300mm_CMP_Platen_1. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-109/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-109/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Edge-Loc",
+      "micro_defect": "Spurious_copper",
+      "expected_fmea_sop": "FMEA-SOP-CMP-300-PL1",
+      "expected_root_cause_keywords": [
+        "Retaining ring pressure",
+        "slurry contamination",
+        "platen speed"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-010",
+    "lot_id": "LOT-GOLDEN-110",
+    "chamber": "300mm_RIE_Etch_Chamber_3",
+    "input_ticket": "Lot-110 flagged excursion during inline inspection on 300mm_RIE_Etch_Chamber_3. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-110/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-110/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Center",
+      "micro_defect": "Short",
+      "expected_fmea_sop": "FMEA-SOP-ETCH-300-CH3",
+      "expected_root_cause_keywords": [
+        "RF match capacitor",
+        "Helium backside cooling",
+        "plasma non-uniformity"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-011",
+    "lot_id": "LOT-GOLDEN-111",
+    "chamber": "300mm_Immersion_Litho_Track_2",
+    "input_ticket": "Lot-111 flagged excursion during inline inspection on 300mm_Immersion_Litho_Track_2. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-111/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-111/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Scratch",
+      "micro_defect": "Open_circuit",
+      "expected_fmea_sop": "FMEA-SOP-LITHO-300-TRK2",
+      "expected_root_cause_keywords": [
+        "Wafer stage handling",
+        "photoresist collapse",
+        "focus drift"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-012",
+    "lot_id": "LOT-GOLDEN-112",
+    "chamber": "300mm_CMP_Platen_1",
+    "input_ticket": "Lot-112 flagged excursion during inline inspection on 300mm_CMP_Platen_1. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-112/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-112/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Edge-Loc",
+      "micro_defect": "Spurious_copper",
+      "expected_fmea_sop": "FMEA-SOP-CMP-300-PL1",
+      "expected_root_cause_keywords": [
+        "Retaining ring pressure",
+        "slurry contamination",
+        "platen speed"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-013",
+    "lot_id": "LOT-GOLDEN-113",
+    "chamber": "300mm_RIE_Etch_Chamber_3",
+    "input_ticket": "Lot-113 flagged excursion during inline inspection on 300mm_RIE_Etch_Chamber_3. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-113/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-113/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Center",
+      "micro_defect": "Short",
+      "expected_fmea_sop": "FMEA-SOP-ETCH-300-CH3",
+      "expected_root_cause_keywords": [
+        "RF match capacitor",
+        "Helium backside cooling",
+        "plasma non-uniformity"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-014",
+    "lot_id": "LOT-GOLDEN-114",
+    "chamber": "300mm_Immersion_Litho_Track_2",
+    "input_ticket": "Lot-114 flagged excursion during inline inspection on 300mm_Immersion_Litho_Track_2. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-114/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-114/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Scratch",
+      "micro_defect": "Open_circuit",
+      "expected_fmea_sop": "FMEA-SOP-LITHO-300-TRK2",
+      "expected_root_cause_keywords": [
+        "Wafer stage handling",
+        "photoresist collapse",
+        "focus drift"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-015",
+    "lot_id": "LOT-GOLDEN-115",
+    "chamber": "300mm_CMP_Platen_1",
+    "input_ticket": "Lot-115 flagged excursion during inline inspection on 300mm_CMP_Platen_1. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-115/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-115/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Edge-Loc",
+      "micro_defect": "Spurious_copper",
+      "expected_fmea_sop": "FMEA-SOP-CMP-300-PL1",
+      "expected_root_cause_keywords": [
+        "Retaining ring pressure",
+        "slurry contamination",
+        "platen speed"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-016",
+    "lot_id": "LOT-GOLDEN-116",
+    "chamber": "300mm_RIE_Etch_Chamber_3",
+    "input_ticket": "Lot-116 flagged excursion during inline inspection on 300mm_RIE_Etch_Chamber_3. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-116/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-116/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Center",
+      "micro_defect": "Short",
+      "expected_fmea_sop": "FMEA-SOP-ETCH-300-CH3",
+      "expected_root_cause_keywords": [
+        "RF match capacitor",
+        "Helium backside cooling",
+        "plasma non-uniformity"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-017",
+    "lot_id": "LOT-GOLDEN-117",
+    "chamber": "300mm_Immersion_Litho_Track_2",
+    "input_ticket": "Lot-117 flagged excursion during inline inspection on 300mm_Immersion_Litho_Track_2. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-117/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-117/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Scratch",
+      "micro_defect": "Open_circuit",
+      "expected_fmea_sop": "FMEA-SOP-LITHO-300-TRK2",
+      "expected_root_cause_keywords": [
+        "Wafer stage handling",
+        "photoresist collapse",
+        "focus drift"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-018",
+    "lot_id": "LOT-GOLDEN-118",
+    "chamber": "300mm_CMP_Platen_1",
+    "input_ticket": "Lot-118 flagged excursion during inline inspection on 300mm_CMP_Platen_1. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-118/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-118/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Edge-Loc",
+      "micro_defect": "Spurious_copper",
+      "expected_fmea_sop": "FMEA-SOP-CMP-300-PL1",
+      "expected_root_cause_keywords": [
+        "Retaining ring pressure",
+        "slurry contamination",
+        "platen speed"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-019",
+    "lot_id": "LOT-GOLDEN-119",
+    "chamber": "300mm_RIE_Etch_Chamber_3",
+    "input_ticket": "Lot-119 flagged excursion during inline inspection on 300mm_RIE_Etch_Chamber_3. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-119/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-119/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Center",
+      "micro_defect": "Short",
+      "expected_fmea_sop": "FMEA-SOP-ETCH-300-CH3",
+      "expected_root_cause_keywords": [
+        "RF match capacitor",
+        "Helium backside cooling",
+        "plasma non-uniformity"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-020",
+    "lot_id": "LOT-GOLDEN-120",
+    "chamber": "300mm_Immersion_Litho_Track_2",
+    "input_ticket": "Lot-120 flagged excursion during inline inspection on 300mm_Immersion_Litho_Track_2. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-120/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-120/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Scratch",
+      "micro_defect": "Open_circuit",
+      "expected_fmea_sop": "FMEA-SOP-LITHO-300-TRK2",
+      "expected_root_cause_keywords": [
+        "Wafer stage handling",
+        "photoresist collapse",
+        "focus drift"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-021",
+    "lot_id": "LOT-GOLDEN-121",
+    "chamber": "300mm_CMP_Platen_1",
+    "input_ticket": "Lot-121 flagged excursion during inline inspection on 300mm_CMP_Platen_1. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-121/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-121/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Edge-Loc",
+      "micro_defect": "Spurious_copper",
+      "expected_fmea_sop": "FMEA-SOP-CMP-300-PL1",
+      "expected_root_cause_keywords": [
+        "Retaining ring pressure",
+        "slurry contamination",
+        "platen speed"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-022",
+    "lot_id": "LOT-GOLDEN-122",
+    "chamber": "300mm_RIE_Etch_Chamber_3",
+    "input_ticket": "Lot-122 flagged excursion during inline inspection on 300mm_RIE_Etch_Chamber_3. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-122/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-122/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Center",
+      "micro_defect": "Short",
+      "expected_fmea_sop": "FMEA-SOP-ETCH-300-CH3",
+      "expected_root_cause_keywords": [
+        "RF match capacitor",
+        "Helium backside cooling",
+        "plasma non-uniformity"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-023",
+    "lot_id": "LOT-GOLDEN-123",
+    "chamber": "300mm_Immersion_Litho_Track_2",
+    "input_ticket": "Lot-123 flagged excursion during inline inspection on 300mm_Immersion_Litho_Track_2. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-123/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-123/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Scratch",
+      "micro_defect": "Open_circuit",
+      "expected_fmea_sop": "FMEA-SOP-LITHO-300-TRK2",
+      "expected_root_cause_keywords": [
+        "Wafer stage handling",
+        "photoresist collapse",
+        "focus drift"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-024",
+    "lot_id": "LOT-GOLDEN-124",
+    "chamber": "300mm_CMP_Platen_1",
+    "input_ticket": "Lot-124 flagged excursion during inline inspection on 300mm_CMP_Platen_1. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-124/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-124/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Edge-Loc",
+      "micro_defect": "Spurious_copper",
+      "expected_fmea_sop": "FMEA-SOP-CMP-300-PL1",
+      "expected_root_cause_keywords": [
+        "Retaining ring pressure",
+        "slurry contamination",
+        "platen speed"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  },
+  {
+    "test_case_id": "GOLDEN-EXCURSION-025",
+    "lot_id": "LOT-GOLDEN-125",
+    "chamber": "300mm_RIE_Etch_Chamber_3",
+    "input_ticket": "Lot-125 flagged excursion during inline inspection on 300mm_RIE_Etch_Chamber_3. Diagnose root cause and required maintenance.",
+    "images": [
+      "gs://semicon-raw/LOT-GOLDEN-125/wafer_map.png",
+      "gs://semicon-raw/LOT-GOLDEN-125/die_micrograph.png"
+    ],
+    "expected_ground_truth": {
+      "macro_defect": "Center",
+      "micro_defect": "Short",
+      "expected_fmea_sop": "FMEA-SOP-ETCH-300-CH3",
+      "expected_root_cause_keywords": [
+        "RF match capacitor",
+        "Helium backside cooling",
+        "plasma non-uniformity"
+      ],
+      "max_allowed_latency_ms": 3000.0
+    }
+  }
+]
