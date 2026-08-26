@@ -1,21 +1,149 @@
-# MS-ADC Multimodal Metrology Prompt Registry
-version: "1.2.0"
-last_updated: "2026-08-20"
+# MS-ADC Multimodal Cleanroom Metrology Prompt Registry
+# Adheres to SEMI-E10 and WM-811K / PCB-DATASET In-Context Learning Standards
+version: "2.0.0"
+last_updated: "2026-08-26"
+active_release: "v2.0"
 
 wafer_vlm:
   system_instruction: >
-    You are an expert semiconductor metrology vision reasoning specialist.
-    Analyze the spatial distribution of defective dies on the 300mm wafer-bin map.
-    Classify the defect pattern into one of the 9 canonical WM-811K classes:
+    You are an expert semiconductor metrology vision reasoning specialist analyzing 300mm silicon wafer maps.
+    The input is an RGB wafer-bin matrix rendered with SEMI color encoding:
+    - 0 (Black [0, 0, 0]): Background air outside wafer perimeter.
+    - 1 (Green [40, 180, 40]): Passing functional die.
+    - 2 (Red [230, 30, 30]): Defective die flagged during electrical probe testing.
+    Classify the spatial defect distribution into one of the 9 canonical WM-811K classes:
     [Center, Donut, Edge-Loc, Edge-Ring, Loc, Random, Scratch, Near-full, none].
-    You must output strictly conforming JSON matching the provided schema.
+    Output strictly conforming JSON.
+
+  few_shot_exemplars:
+    - exemplar_id: "WM811K-FEWSHOT-01"
+      canonical_class: "Center"
+      spatial_signature: "High concentration of red defective dies concentrated in a dense circular cluster at the core of the disc."
+      typical_d0: 0.1300
+      root_cause_physics: "Thermal gradient or RF power non-uniformity across plasma center electrode."
+      expected_json:
+        macro_defect: "Center"
+        macro_confidence: 0.985
+        defect_density_d0: 0.1300
+        pattern_description: "Radial center cluster concentrated across core dies."
+
+    - exemplar_id: "WM811K-FEWSHOT-02"
+      canonical_class: "Donut"
+      spatial_signature: "Hollow concentric circular ring of red defective dies with unaffected green passing dies in the center core."
+      typical_d0: 0.1850
+      root_cause_physics: "CMP slurry dispensing nozzle flow stagnation or circular gas distribution ring clogging."
+      expected_json:
+        macro_defect: "Donut"
+        macro_confidence: 0.978
+        defect_density_d0: 0.1850
+        pattern_description: "Hollow concentric toroidal ring pattern with unaffected center dies."
+
+    - exemplar_id: "WM811K-FEWSHOT-03"
+      canonical_class: "Edge-Ring"
+      spatial_signature: "Continuous ring of red defective dies along the extreme outer 300mm wafer bevel perimeter."
+      typical_d0: 0.0820
+      root_cause_physics: "Edge Bead Removal (EBR) solvent overshoot or photoresist spin-coat edge collapse."
+      expected_json:
+        macro_defect: "Edge-Ring"
+        macro_confidence: 0.992
+        defect_density_d0: 0.0820
+        pattern_description: "Continuous defect ring along the extreme outer wafer bevel."
+
+    - exemplar_id: "WM811K-FEWSHOT-04"
+      canonical_class: "Edge-Loc"
+      spatial_signature: "Localized cluster of red defective dies restricted to a single outer edge sector/notch."
+      typical_d0: 0.0950
+      root_cause_physics: "Electrostatic chuck (ESC) pin lifting error or localized clamp ring thermal mismatch."
+      expected_json:
+        macro_defect: "Edge-Loc"
+        macro_confidence: 0.965
+        defect_density_d0: 0.0950
+        pattern_description: "Asymmetric localized defect cluster on the outer quadrant perimeter."
+
+    - exemplar_id: "WM811K-FEWSHOT-05"
+      canonical_class: "Scratch"
+      spatial_signature: "Thin, continuous linear or curved streak of red defective dies cutting across multiple die rows."
+      typical_d0: 0.0410
+      root_cause_physics: "Mechanical handling robot vacuum wand contact or cassette slot misalignment."
+      expected_json:
+        macro_defect: "Scratch"
+        macro_confidence: 0.974
+        defect_density_d0: 0.0410
+        pattern_description: "Linear mechanical streak traversing from outer notch to inner dies."
+
+    - exemplar_id: "WM811K-FEWSHOT-06"
+      canonical_class: "Loc"
+      spatial_signature: "Isolated localized cluster of red defective dies in an arbitrary interior region without geometric symmetry."
+      typical_d0: 0.0760
+      root_cause_physics: "Chamber showerhead particle flake deposition during deposition/etch."
+      expected_json:
+        macro_defect: "Loc"
+        macro_confidence: 0.958
+        defect_density_d0: 0.0760
+        pattern_description: "Localized interior cluster without radial or perimeter symmetry."
+
+    - exemplar_id: "WM811K-FEWSHOT-07"
+      canonical_class: "Random"
+      spatial_signature: "Uniform, sparsely scattered single red defective dies with no spatial clustering or streak geometry."
+      typical_d0: 0.0210
+      root_cause_physics: "Background cleanroom airborne particulate baseline."
+      expected_json:
+        macro_defect: "Random"
+        macro_confidence: 0.942
+        defect_density_d0: 0.0210
+        pattern_description: "Sparsely distributed isolated point defects without spatial clustering."
+
+    - exemplar_id: "WM811K-FEWSHOT-08"
+      canonical_class: "Near-full"
+      spatial_signature: "Widespread catastrophic failure where >85% of silicon dies are rendered red defective."
+      typical_d0: 0.8900
+      root_cause_physics: "Severe tool failure, plasma power supply shutdown, or process gas exhaustion."
+      expected_json:
+        macro_defect: "Near-full"
+        macro_confidence: 0.999
+        defect_density_d0: 0.8900
+        pattern_description: "Catastrophic global defect coverage spanning entire silicon surface."
+
+    - exemplar_id: "WM811K-FEWSHOT-09"
+      canonical_class: "none"
+      spatial_signature: "Clean green wafer with passing dies and zero perceptible red defect clusters."
+      typical_d0: 0.0020
+      root_cause_physics: "Process tool operates within nominal Six-Sigma control limits."
+      expected_json:
+        macro_defect: "none"
+        macro_confidence: 0.995
+        defect_density_d0: 0.0020
+        pattern_description: "Nominal yield wafer with zero defect clusters."
+
   analysis_prompt: >
     Analyze the provided 300mm wafer map for Lot: {lot_id}, Wafer: {wafer_id}.
     Process Tool Chamber: {tool_chamber}.
-    Identify radial concentration, perimeter ring clustering, or linear streaks.
+    Reference the 9 canonical WM-811K few-shot exemplars above.
+    Extract the spatial defect pattern, compute Defect Density D0, and output the JSON classification.
+
+die_vfm:
+  few_shot_classes:
+    - class_name: "short"
+      description: "Conductive copper bridging between adjacent signal interconnect traces."
+      defect_layer: "Metal-1 Interconnect"
+    - class_name: "open_circuit"
+      description: "Discontinuity in conductive trace causing broken circuit path."
+      defect_layer: "Photoresist Line"
+    - class_name: "mouse_bite"
+      description: "Edge void erosion along conductor boundary exceeding 20% trace width tolerance."
+      defect_layer: "Copper Trace Boundary"
+    - class_name: "spur"
+      description: "Unwanted metallic protrusion extending from trace toward adjacent conductor."
+      defect_layer: "Metal Etch Margin"
+    - class_name: "spurious_copper"
+      description: "Isolated un-etched metallic island residing in dielectric isolation trench."
+      defect_layer: "Dielectric Trench"
+    - class_name: "missing_hole"
+      description: "Unopened or incomplete contact via preventing vertical electrical connection."
+      defect_layer: "Interlayer Dielectric Via"
 
 fmea_synthesis:
   system_instruction: >
     You are a cleanroom failure mode and root-cause analysis expert adhering to SEMI E10 standards.
     Synthesize the classified defect signatures and retrieved FMEA SOP chunks into an actionable repair diagnosis.
-    Never hallucinate equipment parameters; cite exact FMEA document IDs and section numbers.
+    Never hallucinate equipment parameters; cite exact FMEA document IDs, section numbers, and tolerance limits.
