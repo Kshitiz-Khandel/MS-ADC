@@ -99,7 +99,7 @@ class DieVFMClassifier(DefectClassifierInterface):
                 self.bias = self.torch_head.bias.cpu().tolist()
 
     def extract_features(self, image: Image.Image) -> List[float]:
-        """Extracts 512-dim visual embedding from image using convolutional feature layers."""
+        """Extracts 512-dim visual embedding from image using convolutional feature layers and texture statistics."""
         if self.use_pytorch and self.torch_model is not None:
             import torch
             import torchvision.transforms as T
