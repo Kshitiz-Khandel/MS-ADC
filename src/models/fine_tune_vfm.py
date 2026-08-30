@@ -77,6 +77,8 @@ def run_training_pipeline(
 
         try:
             import mlflow
+            # Ensure MLflow logs directly to sqlite:///mlflow.db so standard 'mlflow ui' loads runs immediately
+            mlflow.set_tracking_uri("sqlite:///mlflow.db")
             mlflow.set_experiment("ms-adc-die-vfm")
             mlflow.start_run(run_name=f"vfm-{version}")
             mlflow_active = True
@@ -89,9 +91,9 @@ def run_training_pipeline(
                 "val_ratio": val_ratio,
                 "hardware": hw_desc
             })
-            print(f"📋 MLflow Experiment Tracking active: ms-adc-die-vfm (run: vfm-{version})", flush=True)
+            print(f"📋 MLflow Experiment Tracking active in sqlite:///mlflow.db: ms-adc-die-vfm (run: vfm-{version})", flush=True)
         except Exception as e:
-            print(f"ℹ️ MLflow tracking offline/disabled: {e}", flush=True)
+            print(f"ℹ️ MLflow tracking fallback: {e}", flush=True)
 
     # 3. Data Loading & Partitioning
     data_path = Path(data_dir_path)
