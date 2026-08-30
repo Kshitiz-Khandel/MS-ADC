@@ -59,18 +59,28 @@ crash.*.log
 override.tf
 override.tf.json
 
-# Model Weights & Engines
+# Model Weights, Checkpoints & Engines
 *.pt
 *.pth
 *.bin
 *.onnx
 *.plan
 *.engine
+models/*
+!models/.gitkeep
 
-# Datasets
+# Experiment Tracking
+runs/
+mlruns/
+.mlflow/
+
+# Datasets & Local artifacts
 data/raw/
+data/pcb_dataset/
+data/*.zip
 *.pkl
 *.tar.gz
+do not commit/
 
 # macOS
 .DS_Store
