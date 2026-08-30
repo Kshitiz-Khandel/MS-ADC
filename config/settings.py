@@ -43,9 +43,22 @@ try:
             return f"{self.LOCAL_MODEL_DIR}/die_vfm_fp16.engine"
 
         @property
+        def versioned_local_dir(self) -> str:
+            return f"{self.LOCAL_MODEL_DIR}/{self.MODEL_VERSION}"
+
+        @property
+        def versioned_local_checkpoint_path(self) -> str:
+            return f"{self.LOCAL_MODEL_DIR}/{self.MODEL_VERSION}/die_vfm_head.pt"
+
+        @property
         def gcs_versioned_path(self) -> str:
             """Resolves to: gs://semicon-metrology-few-shot-seeds/models/v1.0.0/"""
             return f"gs://{self.GCS_MODEL_BUCKET}/models/{self.MODEL_VERSION}/"
+
+        @property
+        def checkpoint_url(self) -> str:
+            """Resolves to: gs://semicon-metrology-few-shot-seeds/models/v1.0.0/die_vfm_head.pt"""
+            return f"gs://{self.GCS_MODEL_BUCKET}/models/{self.MODEL_VERSION}/die_vfm_head.pt"
 
         # Cleanroom Decision Thresholds
         defect_density_threshold: float = 0.05
@@ -89,8 +102,20 @@ except ImportError:
             return f"{self.LOCAL_MODEL_DIR}/die_vfm_fp16.engine"
 
         @property
+        def versioned_local_dir(self) -> str:
+            return f"{self.LOCAL_MODEL_DIR}/{self.MODEL_VERSION}"
+
+        @property
+        def versioned_local_checkpoint_path(self) -> str:
+            return f"{self.LOCAL_MODEL_DIR}/{self.MODEL_VERSION}/die_vfm_head.pt"
+
+        @property
         def gcs_versioned_path(self) -> str:
             return f"gs://{self.GCS_MODEL_BUCKET}/models/{self.MODEL_VERSION}/"
+
+        @property
+        def checkpoint_url(self) -> str:
+            return f"gs://{self.GCS_MODEL_BUCKET}/models/{self.MODEL_VERSION}/die_vfm_head.pt"
 
         defect_density_threshold: float = 0.05
         vfm_confidence_threshold: float = 0.90
