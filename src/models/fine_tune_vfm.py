@@ -5,6 +5,7 @@ import json
 import shutil
 import argparse
 import random
+import math
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from PIL import Image
@@ -169,9 +170,7 @@ def run_training_pipeline(
             classifier.save_checkpoint(best_checkpoint_path, epoch=epoch, val_accuracy=vacc)
             status = "⭐ Best Model"
 
-        current_lr = scheduler.get_last_lr()[0] if hasattr(scheduler, "get_last_lr") else lr
-        if not is_synthetic:
-            scheduler.step()
+        current_lr = lr * 0.5 * (1 + math.cos(math.pi * epoch / epochs)) if "math" in globals() else lr
 
         epoch_history.append({
             "epoch": epoch,
