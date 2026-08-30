@@ -73,6 +73,8 @@ models/*
 runs/
 mlruns/
 .mlflow/
+mlflow.db
+*.db
 
 # Datasets & Local artifacts
 data/raw/
