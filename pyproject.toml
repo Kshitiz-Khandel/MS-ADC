@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [
     { name = "Kshitiz Khandelwal", email = "kshitiz@google.com" },
-    { name = "Aditya Sharma", email = "aditya@google.com" }
+    { name = "Aditya, email = "itsadi@google.com" }
 ]
 dependencies = [
     "fastapi>=0.110.0",

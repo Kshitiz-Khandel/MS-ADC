@@ -258,12 +258,14 @@ def run_training_pipeline(
 
     # 8. Visual Plots & Checkpoints
     head_pt_path = os.path.join(version_output_dir, "die_vfm_head.pt")
+    head_safetensors_path = os.path.join(version_output_dir, "die_vfm_head.safetensors")
     classifier.save_checkpoint(
         head_pt_path,
         epoch=best_epoch,
         val_accuracy=test_metrics["accuracy"],
         metadata={"test_metrics": test_metrics, "version": version}
     )
+    classifier.save_safetensors(head_safetensors_path)
 
     cm_path = os.path.join(version_output_dir, "confusion_matrix.png")
     curve_path = os.path.join(version_output_dir, "training_loss_curve.png")
@@ -305,6 +307,8 @@ def run_training_pipeline(
 
     # Backwards compatibility mirroring to models/ root
     shutil.copy2(head_pt_path, os.path.join(output_dir, "die_vfm_head.pt"))
+    if os.path.exists(head_safetensors_path):
+        shutil.copy2(head_safetensors_path, os.path.join(output_dir, "die_vfm_head.safetensors"))
     shutil.copy2(engine_path, os.path.join(output_dir, "die_vfm_fp16.engine"))
     shutil.copy2(metrics_json_path, os.path.join(output_dir, "metrics.json"))
     shutil.copy2(curve_path, os.path.join(output_dir, "training_loss_curve.png"))

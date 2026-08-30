@@ -189,6 +189,23 @@ class DieVFMClassifier(DefectClassifierInterface):
             }, f, indent=2)
         return json_path
 
+    def save_safetensors(self, safetensors_path: Union[str, Path]) -> str:
+        """Saves model weights in modern, secure SafeTensors format."""
+        safetensors_path = str(safetensors_path)
+        os.makedirs(os.path.dirname(os.path.abspath(safetensors_path)), exist_ok=True)
+        try:
+            from safetensors.torch import save_file
+            if self.use_pytorch and self.torch_head is not None:
+                tensors_dict = {
+                    "weight": self.torch_head.weight.contiguous(),
+                    "bias": self.torch_head.bias.contiguous()
+                }
+                save_file(tensors_dict, safetensors_path)
+                return safetensors_path
+        except Exception:
+            pass
+        return safetensors_path
+
     def load_checkpoint(self, checkpoint_path: Union[str, Path]) -> Dict[str, Any]:
         """Loads weights from disk."""
         checkpoint_path = str(checkpoint_path)
