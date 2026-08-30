@@ -33,11 +33,20 @@ v1.0.0-final-vfm               | Full VFM + Cosine Annealing + TensorRT   |   98
 ============================================================================================
 ```
 
+### Progression Visual Curves Across Versions:
+
+| Stage | Strategy | Accuracy | Training Curve | Confusion Matrix |
+|---|---|---|---|---|
+| **Stage 1 (`v0.1.0`)** | Raw Linear Probe | 66.67% | ![v0.1.0 Curve](assets/progression/v0.1.0_loss_curve.png) | ![v0.1.0 Matrix](assets/progression/v0.1.0_confusion_matrix.png) |
+| **Stage 2 (`v0.2.0`)** | Domain Adaptation | 83.33% | ![v0.2.0 Curve](assets/progression/v0.2.0_loss_curve.png) | ![v0.2.0 Matrix](assets/progression/v0.2.0_confusion_matrix.png) |
+| **Stage 3 (`v0.3.0`)** | Cleanroom Augmentation | 93.69% | ![v0.3.0 Curve](assets/progression/v0.3.0_loss_curve.png) | ![v0.3.0 Matrix](assets/progression/v0.3.0_confusion_matrix.png) |
+| **Stage 4 (`v1.0.0`)** | Production VFM | **98.40%** | ![v1.0.0 Curve](assets/progression/v1.0.0_loss_curve.png) | ![v1.0.0 Matrix](assets/progression/v1.0.0_confusion_matrix.png) |
+
 ---
 
-## 📈 Visual Evaluation Artifacts
+## 📈 Production Model (v1.0.0) Visual Evaluation Artifacts
 
-### 1. Training & Validation Loss/Accuracy Curves
+### 1. Training & Validation Loss/Accuracy Curves (Production Gate)
 ![Training Loss Curve](assets/training_loss_curve.png)
 
 ### 2. Multi-Class Confusion Matrix (Held-Out Test Set)
