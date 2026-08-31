@@ -29,24 +29,28 @@ class FMEARetriever:
         # Precise Chamber Grounding
         if "etch" in q_lower:
             if "etch" in chunk.doc_id.lower() or "etch" in chunk.tool_chamber.lower():
-                raw_score += 0.8
+                raw_score += 0.5
             else:
                 return 0.0
         elif "litho" in q_lower:
             if "litho" in chunk.doc_id.lower() or "litho" in chunk.tool_chamber.lower() or "scanner" in chunk.tool_chamber.lower():
-                raw_score += 0.8
+                raw_score += 0.5
             else:
                 return 0.0
         elif "cmp" in q_lower:
             if "cmp" in chunk.doc_id.lower() or "cmp" in chunk.tool_chamber.lower() or "platen" in chunk.tool_chamber.lower():
-                raw_score += 0.8
+                raw_score += 0.5
             else:
                 return 0.0
 
-        # Defect class match boost
+        # Exact Defect class match boost (e.g. Center, Short, Scratch, Open)
         for fc in chunk.failure_classes:
             if fc.lower() in q_lower:
                 raw_score += 0.4
+
+        # Actionable section priority (Section 2 troubleshooting SOP over Section 1 overview)
+        if any(h in chunk.section_title.lower() for h in ["excursion", "corrective", "action", "sop", "mechanism"]):
+            raw_score += 0.3
 
         return min(1.0, round(raw_score, 4))
 

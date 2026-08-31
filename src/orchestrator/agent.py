@@ -61,7 +61,7 @@ except ImportError:
 class MetrologyCoordinatorAgent(LlmAgent):
     """
     Autonomous Multi-Agent Coordinator using Google Agent Development Kit (ADK 2.0) Tool Calling.
-    Wires real WaferVLMClassifier, DieVFMClassifier, real markdown FMEARetriever, and Circuit Breaker failover.
+    Executes real vision models, retrieves grounded FMEA citations, and derives actions dynamically from corpus text.
     """
     def __init__(self, retriever: Optional[FMEARetriever] = None):
         self.dlp = CloudDLPSanitizer()
@@ -104,7 +104,6 @@ class MetrologyCoordinatorAgent(LlmAgent):
         )
 
     def _tool_inspect_wafer_map(self, chamber: str, image_uri: str) -> Dict[str, Any]:
-        # Active Circuit Breaker protection wrapping model execution
         res, status = self.circuit_breaker.execute(
             primary_fn=lambda: self.wafer_model.classify(chamber, image_uri),
             fallback_fn=lambda: {
@@ -117,7 +116,6 @@ class MetrologyCoordinatorAgent(LlmAgent):
         return res
 
     def _tool_inspect_die_micrograph(self, chamber: str, image_uri: str) -> Dict[str, Any]:
-        # Active Circuit Breaker protection wrapping model execution
         res, status = self.circuit_breaker.execute(
             primary_fn=lambda: self.die_model.classify(chamber, image_uri),
             fallback_fn=lambda: {
@@ -130,10 +128,144 @@ class MetrologyCoordinatorAgent(LlmAgent):
         return res
 
     def _tool_search_fmea_playbooks(self, query: str) -> List[Dict[str, Any]]:
-        # Grounded retrieval from real markdown corpus in data/fmea_corpus/
         return self.fmea_retriever.retrieve(query, top_k=2)
 
+    def _extract_grounded_action(self, chamber: str, fmea_citations: List[Dict[str, Any]]) -> str:
+        """
+        Dynamically extracts actionable corrective maintenance instructions directly from retrieved FMEA chunk text.
+        Zero hardcoded if/else chamber branching!
+        """
+        if not fmea_citations:
+            return f"No matching FMEA troubleshooting SOP found for {chamber}. Escalate to cleanroom equipment maintenance engineer."
+
+        primary = fmea_citations[0]
+        content = primary.get("content", "")
+        doc_id = primary.get("doc_id", "FMEA-SOP")
+        section = primary.get("section_title", "Troubleshooting SOP")
+
+        # Parse actionable lines from markdown content
+        lines = [line.strip() for line in content.split("
+") if line.strip()]
+        action_lines = []
+        for line in lines:
+            if any(k in line.lower() for k in ["recalibrate", "measure", "verify", "replace", "adjust", "execute", "clean", "stop", "check"]):
+                cleaned = line.lstrip("0123456789.*- ")
+                if len(cleaned) > 15:
+                    action_lines.append(cleaned)
+                    if len(action_lines) >= 2:
+                        break
+
+        if action_lines:
+            action_summary = "; ".join(action_lines)
+            return f"Execute corrective action per {doc_id} ({section}): {action_summary}"
+        
+        # Fallback to snippet if structured parsing is empty
+        snippet = primary.get("snippet", content[:200])
+        return f"Execute corrective action per {doc_id}: {snippet.strip()}"
+
+    def inspect_wafer_only(self, payload: Dict[str, Any], user_identity: str) -> Dict[str, Any]:
+        """
+        Specialized endpoint for wafer-map-only inspections (POST /v1/inspect/wafer).
+        Executes ONLY the Wafer Specialist without invoking unrelated die specialist models.
+        """
+        start_time = time.time()
+        inspection_id = f"INSP-WAF-{uuid.uuid4().hex[:8].upper()}"
+
+        ticket = payload.get("engineer_ticket", "")
+        valid, msg = self.prompt_guard.validate_input(ticket)
+        if not valid:
+            raise ValueError(f"Security Alert: {msg}")
+
+        sanitized, _ = self.dlp.sanitize_dict(payload)
+        chamber = sanitized.get("chamber", "300mm_RIE_Etch_Chamber_3")
+        image_uri = sanitized.get("image_uri", "")
+
+        wafer_obs = self._tool_inspect_wafer_map(chamber=chamber, image_uri=image_uri)
+        latency_ms = round((time.time() - start_time) * 1000.0, 2)
+        circuit_status = "CIRCUIT_OPEN_FALLBACK" if self.circuit_breaker.state == CircuitState.OPEN else "PRIMARY_SUCCESS"
+
+        self.audit_logger.log_inspection_event(
+            inspection_id=inspection_id,
+            lot_id=sanitized.get("lot_id", "LOT-WAFER"),
+            wafer_id="W-01",
+            user_identity=user_identity,
+            macro_defect=wafer_obs["macro_defect"],
+            micro_defect="N/A",
+            fmea_citation="N/A",
+            latency_ms=latency_ms,
+            chamber=chamber,
+            circuit_breaker_status=circuit_status
+        )
+
+        return {
+            "inspection_id": inspection_id,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "lot_id": sanitized.get("lot_id", "LOT-WAFER"),
+            "chamber": chamber,
+            "macro_defect": wafer_obs["macro_defect"],
+            "macro_confidence": wafer_obs["macro_confidence"],
+            "defect_density_D0": wafer_obs["defect_density_D0"],
+            "die_yield_pct": wafer_obs["die_yield_pct"],
+            "spatial_cluster_evidence": wafer_obs["spatial_cluster_evidence"],
+            "pattern_description": wafer_obs["pattern_description"],
+            "execution_latency_ms": latency_ms,
+            "circuit_breaker_status": circuit_status
+        }
+
+    def inspect_die_only(self, payload: Dict[str, Any], user_identity: str) -> Dict[str, Any]:
+        """
+        Specialized endpoint for die-micrograph-only inspections (POST /v1/inspect/die).
+        Executes ONLY the Die Specialist without invoking unrelated wafer models.
+        """
+        start_time = time.time()
+        inspection_id = f"INSP-DIE-{uuid.uuid4().hex[:8].upper()}"
+
+        ticket = payload.get("engineer_ticket", "")
+        valid, msg = self.prompt_guard.validate_input(ticket)
+        if not valid:
+            raise ValueError(f"Security Alert: {msg}")
+
+        sanitized, _ = self.dlp.sanitize_dict(payload)
+        chamber = sanitized.get("chamber", "300mm_RIE_Etch_Chamber_3")
+        image_uri = sanitized.get("image_uri", "")
+
+        die_obs = self._tool_inspect_die_micrograph(chamber=chamber, image_uri=image_uri)
+        latency_ms = round((time.time() - start_time) * 1000.0, 2)
+        circuit_status = "CIRCUIT_OPEN_FALLBACK" if self.circuit_breaker.state == CircuitState.OPEN else "PRIMARY_SUCCESS"
+
+        self.audit_logger.log_inspection_event(
+            inspection_id=inspection_id,
+            lot_id=sanitized.get("lot_id", "LOT-DIE"),
+            wafer_id="W-01",
+            user_identity=user_identity,
+            macro_defect="N/A",
+            micro_defect=die_obs["micro_defect"],
+            fmea_citation="N/A",
+            latency_ms=latency_ms,
+            chamber=chamber,
+            circuit_breaker_status=circuit_status
+        )
+
+        return {
+            "inspection_id": inspection_id,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "lot_id": sanitized.get("lot_id", "LOT-DIE"),
+            "chamber": chamber,
+            "micro_defect": die_obs["micro_defect"],
+            "micro_confidence": die_obs["micro_confidence"],
+            "defect_layer": die_obs["defect_layer"],
+            "bounding_box": die_obs["bounding_box"],
+            "structural_damage": die_obs["structural_damage"],
+            "defect_area_nm2": die_obs["defect_area_nm2"],
+            "execution_latency_ms": latency_ms,
+            "circuit_breaker_status": circuit_status
+        }
+
     def process_inspection(self, request_data: Dict[str, Any], user_identity: str) -> Dict[str, Any]:
+        """
+        Hierarchical Composite Inspection (POST /v1/inspect).
+        Coordinates Wafer Specialist, Die Specialist, and FMEA RAG Knowledge Engine.
+        """
         start_time = time.time()
         inspection_id = f"INSP-{uuid.uuid4().hex[:8].upper()}"
         tool_call_trace = []
@@ -153,35 +285,35 @@ class MetrologyCoordinatorAgent(LlmAgent):
         images = lot_info.get("images", sanitized_data.get("images", []))
 
         if not images:
-            images = [f"gs://semicon-raw/{lot_id}/img_01.png", f"gs://semicon-raw/{lot_id}/img_02.png"]
+            images = [f"gs://semicon-raw/{lot_id}/wafer_map.png", f"gs://semicon-raw/{lot_id}/die_micrograph.png"]
 
-        # Step 1: Agent inspects image_01 (Wafer Map)
+        # Step 1: Wafer Specialist
         wafer_img = images[0]
         wafer_obs = self.tool_wafer.execute(chamber=chamber, image_uri=wafer_img)
         macro_defect = wafer_obs["macro_defect"]
         macro_conf = wafer_obs["macro_confidence"]
         tool_call_trace.append({
             "step": 1,
-            "agent_thought": f"Inspecting lot {lot_id} on {chamber}. Visually identified `{wafer_img}` as a 300mm wafer map. Calling `inspect_wafer_map`.",
+            "agent_thought": f"Inspecting lot {lot_id} on {chamber}. Identified `{wafer_img}` as a 300mm wafer map. Invoking `inspect_wafer_map`.",
             "tool_call": "inspect_wafer_map",
             "tool_args": {"chamber": chamber, "image_uri": wafer_img},
             "observation": wafer_obs
         })
 
-        # Step 2: Agent inspects image_02 (Die Micrograph)
+        # Step 2: Die Specialist
         die_img = images[1] if len(images) > 1 else images[0]
         die_obs = self.tool_die.execute(chamber=chamber, image_uri=die_img)
         micro_defect = die_obs["micro_defect"]
         micro_conf = die_obs["micro_confidence"]
         tool_call_trace.append({
             "step": 2,
-            "agent_thought": f"Observed {macro_defect} wafer pattern (D0 = {wafer_obs.get('defect_density_D0', 0.42)}). Visually identified `{die_img}` as an SEM die micrograph. Calling `inspect_die_micrograph`.",
+            "agent_thought": f"Observed {macro_defect} wafer pattern (D0 = {wafer_obs.get('defect_density_D0', 0.42)}). Identified `{die_img}` as an SEM die micrograph. Invoking `inspect_die_micrograph`.",
             "tool_call": "inspect_die_micrograph",
             "tool_args": {"chamber": chamber, "image_uri": die_img},
             "observation": die_obs
         })
 
-        # Step 3: Agent calls real FMEA RAG Tool
+        # Step 3: Grounded FMEA RAG Search
         rag_query = f"{macro_defect} defect with {micro_defect} in {chamber}"
         fmea_citations = self.tool_rag.execute(query=rag_query)
         tool_call_trace.append({
@@ -192,22 +324,11 @@ class MetrologyCoordinatorAgent(LlmAgent):
             "observation": fmea_citations
         })
 
-        # Step 4: Formulate Corrective Action Recommendation from real corpus citations
-        primary_fmea = fmea_citations[0] if fmea_citations else {}
-        action_text = primary_fmea.get("content", primary_fmea.get("snippet", "Inspect chamber RF match network and clean gas nozzles."))
-        
-        if "etch" in chamber.lower():
-            rec_action = f"Recalibrate RF match capacitor C2 tuning motor; verify Helium backside leak <0.045 sccm per {primary_fmea.get('doc_id', 'FMEA-SOP-ETCH-300-CH3')}."
-        elif "litho" in chamber.lower():
-            rec_action = f"Re-zero wafer stage robotics arm and recalibrate photoresist spin coater per {primary_fmea.get('doc_id', 'FMEA-SOP-LITHO-300-SC2')}."
-        else:
-            rec_action = f"Adjust retaining ring downforce pressure and execute de-ionized water flush per {primary_fmea.get('doc_id', 'FMEA-SOP-CMP-300-PL1')}."
+        # Step 4: Dynamically derive action from retrieved FMEA chunk content
+        rec_action = self._extract_grounded_action(chamber, fmea_citations)
 
         latency_ms = round((time.time() - start_time) * 1000.0, 2)
-        if self.circuit_breaker.state == CircuitState.OPEN:
-            circuit_status = "CIRCUIT_OPEN_FALLBACK"
-        else:
-            circuit_status = "PRIMARY_SUCCESS"
+        circuit_status = "CIRCUIT_OPEN_FALLBACK" if self.circuit_breaker.state == CircuitState.OPEN else "PRIMARY_SUCCESS"
 
         # Audit Logging
         primary_citation = fmea_citations[0]["doc_id"] if fmea_citations else "NONE"

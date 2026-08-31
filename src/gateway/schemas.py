@@ -66,14 +66,56 @@ try:
         image_uri: str = Field(..., example="gs://semicon-raw/LOT-WAFER-001/wafer_map.png")
         engineer_ticket: Optional[str] = Field(default="Routine 300mm macro wafer map inspection.")
 
+        @field_validator("lot_id", "chamber", "image_uri")
+        @classmethod
+        def check_non_empty(cls, v):
+            if v is None or not str(v).strip():
+                raise ValidationError("Field cannot be empty or None")
+            return v
+
     class DieInspectionRequest(BaseModel):
         lot_id: str = Field(..., example="LOT-DIE-001")
         chamber: str = Field(..., example="300mm_RIE_Etch_Chamber_3")
         image_uri: str = Field(..., example="gs://semicon-raw/LOT-DIE-001/die_sem_01.png")
         engineer_ticket: Optional[str] = Field(default="Sub-micron SEM die defect inspection.")
 
+        @field_validator("lot_id", "chamber", "image_uri")
+        @classmethod
+        def check_non_empty(cls, v):
+            if v is None or not str(v).strip():
+                raise ValidationError("Field cannot be empty or None")
+            return v
+
     # Compatibility alias
     InspectionRequest = CompositeInspectionRequest
+
+    class WaferInspectionResponse(BaseModel):
+        inspection_id: str
+        timestamp: str
+        lot_id: str
+        chamber: str
+        macro_defect: str
+        macro_confidence: float
+        defect_density_D0: float
+        die_yield_pct: float
+        spatial_cluster_evidence: Dict[str, Any]
+        pattern_description: str
+        execution_latency_ms: float
+        circuit_breaker_status: str
+
+    class DieInspectionResponse(BaseModel):
+        inspection_id: str
+        timestamp: str
+        lot_id: str
+        chamber: str
+        micro_defect: str
+        micro_confidence: float
+        defect_layer: str
+        bounding_box: Dict[str, int]
+        structural_damage: str
+        defect_area_nm2: float
+        execution_latency_ms: float
+        circuit_breaker_status: str
 
     class InspectionResponse(BaseModel):
         inspection_id: str
@@ -115,6 +157,8 @@ except ImportError:
 
     class WaferInspectionRequest:
         def __init__(self, lot_id: str, chamber: str, image_uri: str, engineer_ticket: str = ""):
+            if not lot_id or not chamber or not image_uri:
+                raise ValidationError("Required fields cannot be empty")
             self.lot_id = lot_id
             self.chamber = chamber
             self.image_uri = image_uri
@@ -122,12 +166,24 @@ except ImportError:
 
     class DieInspectionRequest:
         def __init__(self, lot_id: str, chamber: str, image_uri: str, engineer_ticket: str = ""):
+            if not lot_id or not chamber or not image_uri:
+                raise ValidationError("Required fields cannot be empty")
             self.lot_id = lot_id
             self.chamber = chamber
             self.image_uri = image_uri
             self.engineer_ticket = engineer_ticket
 
     InspectionRequest = CompositeInspectionRequest
+
+    class WaferInspectionResponse:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+    class DieInspectionResponse:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
 
     class InspectionResponse:
         def __init__(self, **kwargs):

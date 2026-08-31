@@ -3,7 +3,9 @@ from src.gateway.schemas import (
     CompositeInspectionRequest,
     WaferInspectionRequest,
     DieInspectionRequest,
-    InspectionResponse
+    InspectionResponse,
+    WaferInspectionResponse,
+    DieInspectionResponse
 )
 from src.gateway.auth import verify_cleanroom_token
 from src.orchestrator.agent import MetrologyCoordinatorAgent
@@ -24,44 +26,30 @@ async def composite_inspection(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-@router.post("/inspect/wafer", response_model=InspectionResponse)
+@router.post("/inspect/wafer", response_model=WaferInspectionResponse)
 async def inspect_wafer(
     request: WaferInspectionRequest,
     principal: str = Depends(verify_cleanroom_token)
 ):
     """
     Inspects 300mm macro wafer-bin maps for spatial defect pattern classification (WM-811K).
+    Executes ONLY the Wafer Specialist without running unrelated die models.
     """
     try:
-        composite_payload = {
-            "engineer_ticket": request.engineer_ticket,
-            "lot_info": {
-                "lot_id": request.lot_id,
-                "chamber": request.chamber,
-                "images": [request.image_uri]
-            }
-        }
-        return agent.process_inspection(composite_payload, user_identity=principal)
+        return agent.inspect_wafer_only(request.model_dump(), user_identity=principal)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-@router.post("/inspect/die", response_model=InspectionResponse)
+@router.post("/inspect/die", response_model=DieInspectionResponse)
 async def inspect_die(
     request: DieInspectionRequest,
     principal: str = Depends(verify_cleanroom_token)
 ):
     """
     Inspects high-magnification sub-micron SEM die micrographs for micro-defect classification (NV-DINOv2).
+    Executes ONLY the Die Specialist without running unrelated wafer models.
     """
     try:
-        composite_payload = {
-            "engineer_ticket": request.engineer_ticket,
-            "lot_info": {
-                "lot_id": request.lot_id,
-                "chamber": request.chamber,
-                "images": [request.image_uri, request.image_uri]
-            }
-        }
-        return agent.process_inspection(composite_payload, user_identity=principal)
+        return agent.inspect_die_only(request.model_dump(), user_identity=principal)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
