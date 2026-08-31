@@ -3,21 +3,14 @@ import tempfile
 import os
 from pathlib import Path
 
-try:
-    from PIL import Image
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
-
 from src.ingestion.dataset_loader import PCBDefectDatasetLoader, DIE_DEFECT_CLASSES
-from src.ingestion.augmentor import MetrologyAugmentor
 
-@unittest.skipIf(not HAS_PIL, "PIL not installed in test environment")
 class TestDatasetLoader(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name)
 
+        # Create mock PCB dataset hierarchy using portable format
         for cls in DIE_DEFECT_CLASSES:
             cls_dir = self.root / "PCB_DATASET" / "images" / cls.capitalize()
             cls_dir.mkdir(parents=True, exist_ok=True)
@@ -26,14 +19,15 @@ class TestDatasetLoader(unittest.TestCase):
             ann_dir.mkdir(parents=True, exist_ok=True)
 
             for i in range(12):
-                img_path = cls_dir / f"{cls}_{i:02d}.jpg"
-                img = Image.new("RGB", (300, 300), color=(i * 10, i * 20, i * 15))
-                img.save(img_path)
+                img_path = cls_dir / f"{cls}_{i:02d}.png"
+                # Write minimal valid dummy binary
+                with open(img_path, "wb") as f:
+                    f.write(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
 
                 xml_path = ann_dir / f"{cls}_{i:02d}.xml"
                 xml_content = f"""<annotation>
                     <folder>{cls.capitalize()}</folder>
-                    <filename>{cls}_{i:02d}.jpg</filename>
+                    <filename>{cls}_{i:02d}.png</filename>
                     <size><width>300</width><height>300</height><depth>3</depth></size>
                     <object>
                         <name>{cls}</name>

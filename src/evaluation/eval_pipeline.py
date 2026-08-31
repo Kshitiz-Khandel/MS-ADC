@@ -13,6 +13,7 @@ class MetrologyEvalPipeline:
     """
     Automated Continuous Evaluation & Quality Gate Pipeline (Comp 5 & 27).
     Evaluates grounded vision accuracy, Information Retrieval (NDCG@2, Recall@2), and genuine generator faithfulness.
+    Strictly evaluates response text independently and validates citation support separately!
     """
     def __init__(self, golden_dataset_path: Optional[Path] = None):
         self.dataset_path = golden_dataset_path or (Path(__file__).parent / "golden_dataset.json")
@@ -31,24 +32,51 @@ class MetrologyEvalPipeline:
         idcg = 1.0 / (math.log2(1 + 1))
         return dcg / idcg
 
-    def evaluate_faithfulness(self, response_text: str, expected_keywords: List[str], citations: List[Dict[str, Any]]) -> float:
+    def evaluate_faithfulness(self, response_text: str, expected_keywords: List[str]) -> float:
+        """
+        Measures real keyword presence directly within the synthesized recommended action.
+        Evaluates response text SEPARATELY without appending corpus text!
+        """
         if not expected_keywords:
             return 1.0
 
-        corpus_text = " ".join([c.get("content", "") + " " + c.get("section_title", "") for c in citations]).lower()
-        resp_text = response_text.lower() + " " + corpus_text
-
+        resp_lower = response_text.lower()
         matches = 0
         for kw in expected_keywords:
             kw_clean = kw.lower()
-            if kw_clean in resp_text:
+            if kw_clean in resp_lower:
                 matches += 1
             else:
                 subterms = [t for t in kw_clean.split() if len(t) > 3]
-                if any(t in resp_text for t in subterms):
+                if any(t in resp_lower for t in subterms):
                     matches += 1
 
         return round(matches / len(expected_keywords), 4)
+
+    def citation_supports_action(self, response_text: str, citations: List[Dict[str, Any]]) -> bool:
+        """
+        Requires meaningful action words from the response to occur in the cited content.
+        Guarantees that recommended actions are strictly backed by retrieved FMEA evidence.
+        """
+        if not citations:
+            return False
+
+        combined_citations = " ".join(c.get("content", "").lower() for c in citations)
+        resp_lower = response_text.lower()
+        
+        # Extract meaningful technical keywords from the synthesized response
+        words = [
+            w.strip(".,;:()$[]{}") 
+            for w in resp_lower.split() 
+            if len(w) > 4 and w not in ["execute", "action", "corrective", "maintenance", "troubleshooting", "diagnosis", "physical", "cause", "section"]
+        ]
+        
+        if not words:
+            return True
+            
+        supported_count = sum(1 for w in words if w in combined_citations)
+        support_ratio = supported_count / len(words)
+        return support_ratio >= 0.70
 
     def run_benchmark(self) -> Dict[str, Any]:
         dataset = self.load_golden_dataset()
@@ -61,7 +89,9 @@ class MetrologyEvalPipeline:
         ndcg_scores = []
         mrr_scores = []
         faithfulness_scores = []
+        supported_citations_list = []
         latencies = []
+        all_cases_passed_gate = True
         
         start_eval_time = time.time()
         
@@ -80,13 +110,15 @@ class MetrologyEvalPipeline:
             res = self.agent.process_inspection(payload, user_identity="eval_pipeline_runner")
             latencies.append(res["execution_latency_ms"])
             
-            # 1. Vision Classification Evaluation
-            if res["macro_defect"] == expected["macro_defect"]:
+            # 1. Vision Classification Check
+            is_wafer_ok = (res["macro_defect"].lower() == expected["macro_defect"].lower())
+            is_die_ok = (res["micro_defect"].lower() == expected["micro_defect"].lower())
+            if is_wafer_ok:
                 wafer_correct += 1
-            if res["micro_defect"] == expected["micro_defect"]:
+            if is_die_ok:
                 die_correct += 1
                 
-            # 2. Information Retrieval (IR) Evaluation
+            # 2. Information Retrieval (IR) Check
             retrieved_doc_ids = [c["doc_id"] for c in res["fmea_citations"]]
             target_sop = expected["expected_fmea_sop"]
             
@@ -102,8 +134,26 @@ class MetrologyEvalPipeline:
             rank = (retrieved_doc_ids.index(target_sop) + 1) if target_sop in retrieved_doc_ids else 0
             mrr_scores.append(1.0 / rank if rank > 0 else 0.0)
             
-            faith_score = self.evaluate_faithfulness(res["recommended_action"], expected["expected_root_cause_keywords"], res["fmea_citations"])
+            # 3. Genuine Generator Faithfulness on Response Text ALONE
+            faith_score = self.evaluate_faithfulness(res["recommended_action"], expected["expected_root_cause_keywords"])
             faithfulness_scores.append(faith_score)
+
+            # 4. Independent Citation Support Check
+            is_supported = self.citation_supports_action(res["recommended_action"], res["fmea_citations"])
+            supported_citations_list.append(1.0 if is_supported else 0.0)
+
+            # Strict Per-Case Quality Gate
+            case_passed = (
+                is_wafer_ok and
+                is_die_ok and
+                (is_recalled == 1.0) and
+                (len(res["fmea_citations"]) > 0) and
+                is_supported and
+                (faith_score >= 0.95) and
+                (res["execution_latency_ms"] <= expected.get("max_allowed_latency_ms", 3000.0))
+            )
+            if not case_passed:
+                all_cases_passed_gate = False
 
         elapsed_total = time.time() - start_eval_time
         
@@ -114,13 +164,16 @@ class MetrologyEvalPipeline:
         avg_ndcg = (sum(ndcg_scores) / total_cases) * 100.0
         avg_mrr = sum(mrr_scores) / total_cases
         avg_faithfulness = (sum(faithfulness_scores) / total_cases) * 100.0
+        avg_citation_support = (sum(supported_citations_list) / total_cases) * 100.0
         avg_latency = sum(latencies) / total_cases
 
         gates_passed = (
+            all_cases_passed_gate and
             die_acc >= 98.0 and
             wafer_acc >= 95.0 and
             avg_recall >= 95.0 and
             round(avg_faithfulness, 2) >= 95.0 and
+            avg_citation_support >= 95.0 and
             avg_latency < 3000.0
         )
 
@@ -140,6 +193,7 @@ class MetrologyEvalPipeline:
             },
             "generator_metrics": {
                 "faithfulness_grounding_score_pct": round(avg_faithfulness, 2),
+                "citation_evidence_support_pct": round(avg_citation_support, 2),
                 "hallucination_rate_pct": round(100.0 - avg_faithfulness, 2)
             },
             "performance_metrics": {

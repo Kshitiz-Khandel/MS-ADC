@@ -132,15 +132,17 @@ class MetrologyCoordinatorAgent(LlmAgent):
 
     def _extract_grounded_action(self, chamber: str, fmea_citations: List[Dict[str, Any]]) -> str:
         """
-        Dynamically extracts actionable corrective maintenance instructions directly from retrieved FMEA chunk text.
+        Dynamically extracts authoritative physical root causes and corrective maintenance instructions directly from retrieved FMEA chunk text.
         Zero hardcoded if/else chamber branching!
         """
         if not fmea_citations:
             return f"No matching FMEA troubleshooting SOP found for {chamber}. Escalate to cleanroom equipment maintenance engineer."
 
+        # Prioritize detailed excursion troubleshooting SOP chunk over high-level overview
         target_chunk = fmea_citations[0]
         for c in fmea_citations:
-            if any(k in c.get("content", "").lower() for k in ["recalibrate", "rf match", "wafer stage", "retaining ring", "corrective action"]):
+            title_l = c.get("section_title", "").lower()
+            if any(k in title_l for k in ["excursion", "corrective", "action", "sop", "radial", "linear"]):
                 target_chunk = c
                 break
 
@@ -149,20 +151,39 @@ class MetrologyCoordinatorAgent(LlmAgent):
         section = target_chunk.get("section_title", "Troubleshooting SOP")
 
         lines = [line.strip() for line in content.splitlines() if line.strip()]
-        action_lines = []
+        root_causes = []
+        sop_steps = []
+        current_section = "overview"
+
         for line in lines:
-            if any(k in line.lower() for k in ["rf match capacitor", "helium backside", "recalibrate", "wafer stage", "retaining ring", "adjust", "verify", "replace"]):
-                cleaned = line.lstrip("0123456789.*- ")
-                if len(cleaned) > 15:
-                    action_lines.append(cleaned)
-                    if len(action_lines) >= 2:
-                        break
+            if "### 2.1" in line or "failure mechanism" in line.lower():
+                current_section = "root_cause"
+                continue
+            elif "### 2.2" in line or "corrective action" in line.lower():
+                current_section = "sop"
+                continue
+            
+            # Skip non-body or pattern header metadata
+            if line.startswith("#") or "wafer spatial pattern" in line.lower() or "die micro-defect" in line.lower() or line == "* **Physical Root Cause:**":
+                continue
 
-        if action_lines:
-            action_summary = "; ".join(action_lines)
-            return f"Execute corrective action per {doc_id} ({section}): {action_summary}"
+            cleaned = line.lstrip("0123456789.*- ")
+            if len(cleaned) > 10:
+                if current_section == "root_cause" and len(root_causes) < 4:
+                    root_causes.append(cleaned)
+                elif current_section == "sop" and len(sop_steps) < 3:
+                    sop_steps.append(cleaned)
 
-        snippet = target_chunk.get("snippet", content[:200])
+        parts = []
+        if root_causes:
+            parts.append(f"Physical Root Cause Diagnosis: {'; '.join(root_causes)}.")
+        if sop_steps:
+            parts.append(f"Corrective Maintenance SOP: {'; '.join(sop_steps)}.")
+
+        if parts:
+            return f"Execute per {doc_id} ({section}): {' '.join(parts)}"
+
+        snippet = target_chunk.get("snippet", content[:250])
         return f"Execute corrective action per {doc_id}: {snippet.strip()}"
 
     def inspect_wafer_only(self, payload: Dict[str, Any], user_identity: str) -> Dict[str, Any]:
