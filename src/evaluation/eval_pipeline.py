@@ -1,10 +1,15 @@
 import json
 import time
+import math
+import sys
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 from src.orchestrator.agent import MetrologyCoordinatorAgent
 
-class GoldenBenchmarkEvaluator:
+class MetrologyEvalPipeline:
     """
     Automated Continuous Evaluation & Quality Gate Pipeline (Comp 5 & 27).
     Evaluates grounded vision accuracy, Information Retrieval (NDCG@2, Recall@2), and genuine generator faithfulness.
@@ -27,10 +32,6 @@ class GoldenBenchmarkEvaluator:
         return dcg / idcg
 
     def evaluate_faithfulness(self, response_text: str, expected_keywords: List[str], citations: List[Dict[str, Any]]) -> float:
-        """
-        Measures real keyword and factual grounding across the synthesized response and retrieved FMEA chunks.
-        Zero artificial clamping!
-        """
         if not expected_keywords:
             return 1.0
 
@@ -43,7 +44,6 @@ class GoldenBenchmarkEvaluator:
             if kw_clean in resp_text:
                 matches += 1
             else:
-                # Sub-term match for compound cleanroom phrases
                 subterms = [t for t in kw_clean.split() if len(t) > 3]
                 if any(t in resp_text for t in subterms):
                     matches += 1
@@ -90,22 +90,18 @@ class GoldenBenchmarkEvaluator:
             retrieved_doc_ids = [c["doc_id"] for c in res["fmea_citations"]]
             target_sop = expected["expected_fmea_sop"]
             
-            # Recall@2
             is_recalled = 1.0 if target_sop in retrieved_doc_ids[:2] else 0.0
             retrieval_recalls.append(is_recalled)
             
-            # Chamber Isolation Precision
             relevant_in_top2 = sum(1 for d in retrieved_doc_ids[:2] if target_sop in d)
             retrieval_precisions.append(relevant_in_top2 / max(len(retrieved_doc_ids[:2]), 1))
             
-            # NDCG@2 & MRR
             ndcg = self.calculate_ndcg(retrieved_doc_ids, target_sop, k=2)
             ndcg_scores.append(ndcg)
             
             rank = (retrieved_doc_ids.index(target_sop) + 1) if target_sop in retrieved_doc_ids else 0
             mrr_scores.append(1.0 / rank if rank > 0 else 0.0)
             
-            # 3. Genuine Generator Grounding Evaluation (No Artificial Clamping)
             faith_score = self.evaluate_faithfulness(res["recommended_action"], expected["expected_root_cause_keywords"], res["fmea_citations"])
             faithfulness_scores.append(faith_score)
 
@@ -153,8 +149,9 @@ class GoldenBenchmarkEvaluator:
             }
         }
 
+GoldenBenchmarkEvaluator = MetrologyEvalPipeline
+
 if __name__ == "__main__":
-    import math
-    evaluator = GoldenBenchmarkEvaluator()
+    evaluator = MetrologyEvalPipeline()
     report = evaluator.run_benchmark()
     print(json.dumps(report, indent=2))

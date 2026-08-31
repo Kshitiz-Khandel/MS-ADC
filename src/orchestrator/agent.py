@@ -138,17 +138,20 @@ class MetrologyCoordinatorAgent(LlmAgent):
         if not fmea_citations:
             return f"No matching FMEA troubleshooting SOP found for {chamber}. Escalate to cleanroom equipment maintenance engineer."
 
-        primary = fmea_citations[0]
-        content = primary.get("content", "")
-        doc_id = primary.get("doc_id", "FMEA-SOP")
-        section = primary.get("section_title", "Troubleshooting SOP")
+        target_chunk = fmea_citations[0]
+        for c in fmea_citations:
+            if any(k in c.get("content", "").lower() for k in ["recalibrate", "rf match", "wafer stage", "retaining ring", "corrective action"]):
+                target_chunk = c
+                break
 
-        # Parse actionable lines from markdown content
-        lines = [line.strip() for line in content.split("
-") if line.strip()]
+        content = target_chunk.get("content", "")
+        doc_id = target_chunk.get("doc_id", "FMEA-SOP")
+        section = target_chunk.get("section_title", "Troubleshooting SOP")
+
+        lines = [line.strip() for line in content.splitlines() if line.strip()]
         action_lines = []
         for line in lines:
-            if any(k in line.lower() for k in ["recalibrate", "measure", "verify", "replace", "adjust", "execute", "clean", "stop", "check"]):
+            if any(k in line.lower() for k in ["rf match capacitor", "helium backside", "recalibrate", "wafer stage", "retaining ring", "adjust", "verify", "replace"]):
                 cleaned = line.lstrip("0123456789.*- ")
                 if len(cleaned) > 15:
                     action_lines.append(cleaned)
@@ -158,15 +161,14 @@ class MetrologyCoordinatorAgent(LlmAgent):
         if action_lines:
             action_summary = "; ".join(action_lines)
             return f"Execute corrective action per {doc_id} ({section}): {action_summary}"
-        
-        # Fallback to snippet if structured parsing is empty
-        snippet = primary.get("snippet", content[:200])
+
+        snippet = target_chunk.get("snippet", content[:200])
         return f"Execute corrective action per {doc_id}: {snippet.strip()}"
 
     def inspect_wafer_only(self, payload: Dict[str, Any], user_identity: str) -> Dict[str, Any]:
         """
         Specialized endpoint for wafer-map-only inspections (POST /v1/inspect/wafer).
-        Executes ONLY the Wafer Specialist without invoking unrelated die specialist models.
+        Executes ONLY the Wafer Specialist without invoking unrelated die models.
         """
         start_time = time.time()
         inspection_id = f"INSP-WAF-{uuid.uuid4().hex[:8].upper()}"
@@ -262,21 +264,15 @@ class MetrologyCoordinatorAgent(LlmAgent):
         }
 
     def process_inspection(self, request_data: Dict[str, Any], user_identity: str) -> Dict[str, Any]:
-        """
-        Hierarchical Composite Inspection (POST /v1/inspect).
-        Coordinates Wafer Specialist, Die Specialist, and FMEA RAG Knowledge Engine.
-        """
         start_time = time.time()
         inspection_id = f"INSP-{uuid.uuid4().hex[:8].upper()}"
         tool_call_trace = []
 
-        # 1. Security & Prompt Injection Defense
         ticket_text = request_data.get("engineer_ticket", request_data.get("operator_notes", ""))
         valid, msg = self.prompt_guard.validate_input(ticket_text)
         if not valid:
             raise ValueError(f"Security Alert: {msg}")
 
-        # 2. Cloud DLP Sensitive IP Redaction
         sanitized_data, _ = self.dlp.sanitize_dict(request_data)
         lot_info = sanitized_data.get("lot_info", {})
         

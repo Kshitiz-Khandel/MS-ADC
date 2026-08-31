@@ -37,22 +37,18 @@ class WaferVLMClassifier:
             for j in range(grid_size):
                 dist = math.sqrt((i - radius)**2 + (j - radius)**2) / radius
                 if dist <= 1.0:
-                    # In wafer perimeter
                     if "litho" in ch_str or "scratch" in uri_str or "trk" in uri_str:
-                        # Linear Scratch trajectory
                         expected_j = int(14 + 0.7 * i + 3.0 * math.sin(i / 5.0))
                         if abs(j - expected_j) <= 1 and 12 <= i <= 42:
                             matrix[i][j] = 2
                         else:
                             matrix[i][j] = 1
                     elif "cmp" in ch_str or "edge" in uri_str or "platen" in ch_str:
-                        # Edge-Loc perimeter cluster
                         if 0.78 <= dist <= 0.98 and j > radius:
                             matrix[i][j] = 2
                         else:
                             matrix[i][j] = 1
                     else:
-                        # Center plasma peaking
                         if dist <= 0.38:
                             matrix[i][j] = 2
                         else:
@@ -68,7 +64,6 @@ class WaferVLMClassifier:
         total_dies = 0
         failing_dies = 0
         defect_radii = []
-        defect_coords = []
 
         for i in range(grid_size):
             for j in range(grid_size):
@@ -79,7 +74,6 @@ class WaferVLMClassifier:
                     failing_dies += 1
                     dist = math.sqrt((i - radius)**2 + (j - radius)**2) / radius
                     defect_radii.append(dist)
-                    defect_coords.append((i, j))
 
         passing_dies = total_dies - failing_dies
         d0 = round(failing_dies / max(total_dies, 1), 4)
@@ -93,7 +87,6 @@ class WaferVLMClassifier:
             mean_r = 0.0
             radial_std = 0.0
 
-        # Pattern classification derived from spatial metrics
         ch_str = str(chamber).lower()
         if "litho" in ch_str or "scratch" in str(image_uri).lower():
             macro_defect = "Scratch"

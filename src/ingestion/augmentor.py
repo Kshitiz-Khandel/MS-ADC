@@ -1,5 +1,10 @@
+from __future__ import annotations
 from typing import Any, Optional
-from PIL import Image, ImageEnhance
+try:
+    from PIL import Image, ImageEnhance
+except ImportError:
+    Image = None
+    ImageEnhance = None
 import random
 
 try:
@@ -44,7 +49,7 @@ class MetrologyAugmentor:
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
-    def augment_pil_image(self, img: Image.Image) -> Image.Image:
+    def augment_pil_image(self, img: Any) -> Any:
         """Applies random cleanroom optical transforms directly on PIL image without Torch dependency."""
         out = img.copy()
 

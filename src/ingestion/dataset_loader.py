@@ -1,9 +1,13 @@
+from __future__ import annotations
 import os
 import random
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 DIE_DEFECT_CLASSES = [
     "missing_hole",
@@ -77,7 +81,7 @@ class PCBDefectDatasetLoader:
                 return c
         return None
 
-    def load_and_preprocess_image(self, image_path: Path) -> Image.Image:
+    def load_and_preprocess_image(self, image_path: Path) -> Any:
         """
         Loads optical micrograph and crops the high-resolution localized defect patch (ROI).
         If bounding box annotation exists, crops the defect region with padding.
