@@ -362,15 +362,23 @@ class MetrologyCoordinatorAgent(LlmAgent):
             circuit_breaker_status=circuit_status
         )
 
+        d0 = wafer_obs.get("defect_density_D0", 0.0)
+        yield_pct = wafer_obs.get("die_yield_pct", round(max(0.0, (1.0 - d0) * 100.0), 2))
+
         return {
             "inspection_id": inspection_id,
+            "audit_id": inspection_id,
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "lot_id": lot_id,
             "chamber": chamber,
             "macro_defect": macro_defect,
             "macro_confidence": macro_conf,
+            "defect_density_D0": d0,
+            "die_yield_pct": yield_pct,
             "micro_defect": micro_defect,
             "micro_confidence": micro_conf,
+            "defect_layer": die_obs.get("defect_layer", "Metal Interconnect"),
+            "bounding_box": die_obs.get("bounding_box", {"x": 0, "y": 0, "width": 10, "height": 10}),
             "fmea_citations": fmea_citations,
             "recommended_action": rec_action,
             "tool_call_trace": tool_call_trace,
