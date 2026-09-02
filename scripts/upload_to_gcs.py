@@ -9,8 +9,12 @@ from pathlib import Path
 def run_cmd(cmd_list, check=True):
     print(f"📡 Executing: {' '.join(cmd_list)}", flush=True)
     res = subprocess.run(cmd_list, capture_output=True, text=True)
-    if res.returncode != 0 and check:
-        print(f"⚠️ Command note: {res.stderr.strip()}", flush=True)
+    if res.returncode != 0:
+        # Always surface failures (e.g. IAM permission errors) even when check=False,
+        # so a failed upload can never look identical to a successful one.
+        print(f"❌ Command failed (exit {res.returncode}): {res.stderr.strip()}", flush=True)
+        if check:
+            raise RuntimeError(f"Command failed: {' '.join(cmd_list)}\n{res.stderr.strip()}")
     elif res.stdout.strip():
         print(f"   {res.stdout.strip()}", flush=True)
     return res

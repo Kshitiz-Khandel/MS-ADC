@@ -1,0 +1,21 @@
+{
+  "version": "v1.0.0-final-vfm",
+  "backbone": "NV-DINOv2 / dinov2_vitb14",
+  "accuracy": 24.11,
+  "loss": 2.0939,
+  "macro_f1": 21.05,
+  "macro_precision": 24.51,
+  "macro_recall": 24.18,
+  "epochs": 25,
+  "k_shot": 10,
+  "best_epoch": 4,
+  "test_samples": 1062,
+  "tensorrt_benchmarks": {
+    "pytorch_e2e_ms": 142.0,
+    "tensorrt_fp16_ms": 34.5,
+    "speedup_factor": "4.12x",
+    "memory_reduction": "70%"
+  },
+  "definition_of_done_met": false,
+  "timestamp": "2026-09-01T15:44:15Z"
+}

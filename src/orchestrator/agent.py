@@ -70,7 +70,7 @@ _DIE_UNMODELED_FIELDS = {
 
 class DieVFMSpecialistModel:
     """Micro Die Specialist backed by a trained DINOv2 linear probe."""
-    def __init__(self, checkpoint_path: Optional[str] = "models/v1.1.0-dinov2-linear-probe/die_vfm_head.pt"):
+    def __init__(self, checkpoint_path: Optional[str] = "models/v1.6.0-dinov2-unfreeze4/die_vfm_head.pt"):
         self.classifier = None
         self.load_error: Optional[str] = None
         try:

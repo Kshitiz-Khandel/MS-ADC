@@ -1,0 +1,21 @@
+{
+  "version": "v0.2.0-unfreeze-backbone",
+  "backbone": "NV-DINOv2 / dinov2_vitb14",
+  "accuracy": 23.66,
+  "loss": 1.9891,
+  "macro_f1": 21.99,
+  "macro_precision": 23.86,
+  "macro_recall": 23.67,
+  "epochs": 10,
+  "k_shot": 5,
+  "best_epoch": 8,
+  "test_samples": 1086,
+  "tensorrt_benchmarks": {
+    "pytorch_e2e_ms": 142.0,
+    "tensorrt_fp16_ms": 34.5,
+    "speedup_factor": "4.12x",
+    "memory_reduction": "70%"
+  },
+  "definition_of_done_met": false,
+  "timestamp": "2026-09-01T15:42:12Z"
+}

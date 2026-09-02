@@ -1,0 +1,21 @@
+{
+  "version": "v0.3.0-cleanroom-augmented",
+  "backbone": "NV-DINOv2 / dinov2_vitb14",
+  "accuracy": 24.67,
+  "loss": 1.9371,
+  "macro_f1": 24.57,
+  "macro_precision": 26.57,
+  "macro_recall": 24.68,
+  "epochs": 15,
+  "k_shot": 10,
+  "best_epoch": 9,
+  "test_samples": 1062,
+  "tensorrt_benchmarks": {
+    "pytorch_e2e_ms": 142.0,
+    "tensorrt_fp16_ms": 34.5,
+    "speedup_factor": "4.12x",
+    "memory_reduction": "70%"
+  },
+  "definition_of_done_met": false,
+  "timestamp": "2026-09-01T15:43:12Z"
+}
