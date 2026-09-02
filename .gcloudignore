@@ -1,0 +1,15 @@
+.gcloudignore
+.git
+.gitignore
+tests/
+scratch/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache
+*.pt
+*.pth
+*.onnx
+*.plan
+*.engine
+.DS_Store

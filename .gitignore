@@ -66,8 +66,11 @@ override.tf.json
 *.onnx
 *.plan
 *.engine
-models/*
-!models/.gitkeep
+/models/*.pt
+/models/*.pth
+/models/*.bin
+/models/*.onnx
+/models/*.engine
 
 # Experiment Tracking
 runs/
