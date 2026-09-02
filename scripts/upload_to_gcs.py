@@ -5,6 +5,10 @@ import sys
 import zipfile
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def run_cmd(cmd_list, check=True):
     print(f"📡 Executing: {' '.join(cmd_list)}", flush=True)
@@ -21,7 +25,7 @@ def run_cmd(cmd_list, check=True):
 
 
 def upload_to_gcs(
-    bucket_target: str = "gs://aditya-jit/assests",
+    bucket_target: str = None,
     version: str = "v1.0.0",
     upload_dataset: bool = True
 ):
@@ -31,6 +35,9 @@ def upload_to_gcs(
     """
     print("=" * 80)
     print(f"☁️ MS-ADC Google Cloud Storage (GCS) Sync Engine")
+    bucket_target = bucket_target or os.environ.get("GCS_ASSETS_BUCKET")
+    if not bucket_target:
+        raise ValueError("No GCS bucket provided: pass --bucket or set GCS_ASSETS_BUCKET in .env")
     print(f"🎯 Target Destination: {bucket_target}")
     print("=" * 80)
 
@@ -91,7 +98,7 @@ def upload_to_gcs(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Upload MS-ADC artifacts and datasets to Google Cloud Storage")
-    parser.add_argument("--bucket", type=str, default="gs://aditya-jit/assests", help="GCS target destination URI")
+    parser.add_argument("--bucket", type=str, default=None, help="GCS target destination URI (defaults to $GCS_ASSETS_BUCKET from .env)")
     parser.add_argument("--version", type=str, default="v1.0.0", help="Model version tag")
     parser.add_argument("--skip-dataset", action="store_true", help="Skip uploading the large dataset zip")
 
