@@ -20,7 +20,7 @@ class VertexVectorSearchClient:
         index_endpoint_id: Optional[str] = None,
         deployed_index_id: str = "fmea_playbooks_deployed"
     ):
-        self.project_id = project_id or os.environ.get("PROJECT_ID", settings.PROJECT_ID)
+        self.project_id = project_id or os.environ.get("PROJECT_ID", "kshitiz-gemma3")
         self.location = location
         self.index_endpoint_id = index_endpoint_id or os.environ.get("VERTEX_INDEX_ENDPOINT_ID")
         self.deployed_index_id = deployed_index_id
