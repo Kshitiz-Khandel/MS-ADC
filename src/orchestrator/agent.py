@@ -1,7 +1,10 @@
+import os
 import time
 import uuid
 import datetime
+from io import BytesIO
 from typing import Dict, Any, List, Optional, Callable
+from PIL import Image
 
 from src.security.dlp_sanitizer import CloudDLPSanitizer
 from src.security.prompt_guard import PromptGuard
@@ -111,29 +114,46 @@ class WaferVLMTriageModel:
             }
 
 class DieVFMSpecialistModel:
-    """Micro Die Specialist (NV-DINOv2 ViT + TensorRT <50ms)."""
+    """Micro Die Specialist backed by a trained DINOv2 linear probe."""
+    def __init__(self, checkpoint_path: Optional[str] = "models/v1.1.0-dinov2-linear-probe/die_vfm_head.pt"):
+        self.classifier = None
+        self.load_error: Optional[str] = None
+        try:
+            from src.models.die_vfm import DieVFMClassifier
+            if not checkpoint_path or not os.path.exists(checkpoint_path):
+                raise FileNotFoundError(f"Trained VFM checkpoint not found: {checkpoint_path}")
+            self.classifier = DieVFMClassifier(weights_path=checkpoint_path)
+        except Exception as error:
+            self.load_error = str(error)
+
+    @staticmethod
+    def _load_image(image_uri: str) -> Image.Image:
+        if image_uri.startswith("gs://"):
+            from google.cloud import storage
+
+            bucket_name, blob_name = image_uri[5:].split("/", 1)
+            payload = storage.Client().bucket(bucket_name).blob(blob_name).download_as_bytes()
+            return Image.open(BytesIO(payload)).convert("RGB")
+        return Image.open(image_uri).convert("RGB")
+
     def classify(self, chamber: str, image_uri: str) -> Dict[str, Any]:
-        if "litho" in chamber.lower():
-            return {
-                "micro_defect": "Open_circuit",
-                "micro_confidence": 0.978,
-                "defect_layer": "Photoresist Line",
-                "structural_damage": "Pattern discontinuity from photoresist collapse."
-            }
-        elif "cmp" in chamber.lower():
-            return {
-                "micro_defect": "Spurious_copper",
-                "micro_confidence": 0.965,
-                "defect_layer": "Dielectric Barrier",
-                "structural_damage": "Unpolished copper residue and micro-scratch."
-            }
-        else:
-            return {
-                "micro_defect": "Short",
-                "micro_confidence": 0.982,
-                "defect_layer": "Metal-1 Interconnect",
-                "structural_damage": "Metal line bridging from incomplete oxide etching."
-            }
+        if self.classifier is None:
+            raise ValueError(f"Die VFM is unavailable: {self.load_error}")
+        if not image_uri:
+            raise ValueError("A local path or gs:// URI is required for die image inference")
+
+        try:
+            result = self.classifier.classify_patch(self._load_image(image_uri))
+        except Exception as error:
+            raise ValueError(f"Unable to classify die image '{image_uri}': {error}") from error
+
+        return {
+            "micro_defect": result["predicted_class"].capitalize(),
+            "micro_confidence": result["confidence"],
+            "defect_layer": "Micrograph Optical Patch",
+            "structural_damage": f"Detected physical pattern defect: {result['predicted_class']}",
+            "all_probabilities": result["all_probabilities"],
+        }
 
 # ============================================================================
 # Central Metrology Coordinator (Google ADK Lead Tool-Calling Agent)

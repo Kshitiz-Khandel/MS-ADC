@@ -28,30 +28,14 @@ class TestFineTuneVFM(unittest.TestCase):
         report = SemiconductorYieldCalculator.format_classification_report(metrics)
         self.assertIn("Overall Accuracy", report)
 
-    def test_run_training_pipeline_synthetic(self):
-        res = run_training_pipeline(
-            version="v1.0.0-test",
-            epochs=2,
-            output_dir=self.models_dir,
-            data_dir_path=self.data_dir
-        )
-        self.assertEqual(res["version"], "v1.0.0-test")
-        vdir = res["version_output_dir"]
-
-        # Check all 4 required artifacts in version dir
-        self.assertTrue(os.path.exists(os.path.join(vdir, "die_vfm_head.pt")))
-        self.assertTrue(os.path.exists(os.path.join(vdir, "die_vfm_fp16.engine")))
-        self.assertTrue(os.path.exists(os.path.join(vdir, "metrics.json")))
-        self.assertTrue(os.path.exists(os.path.join(vdir, "training_loss_curve.png")))
-        self.assertTrue(os.path.exists(os.path.join(vdir, "confusion_matrix.png")))
-        self.assertTrue(os.path.exists(os.path.join(vdir, "precision_recall_f1.png")))
-
-        # Check metrics.json contents
-        with open(os.path.join(vdir, "metrics.json"), "r") as f:
-            data = json.load(f)
-            self.assertIn("accuracy", data)
-            self.assertIn("loss", data)
-            self.assertEqual(data["version"], "v1.0.0-test")
+    def test_run_training_pipeline_rejects_missing_dataset(self):
+        with self.assertRaisesRegex(ValueError, "Real training requires"):
+            run_training_pipeline(
+                version="v1.0.0-test",
+                epochs=2,
+                output_dir=self.models_dir,
+                data_dir_path=self.data_dir
+            )
 
 
 if __name__ == "__main__":

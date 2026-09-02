@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from PIL import Image
 
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+
 from src.models.base import DefectClassifierInterface
 
 DIE_DEFECT_CLASSES = [
@@ -18,138 +22,163 @@ DIE_DEFECT_CLASSES = [
 ]
 
 
+def build_linear_probe(embed_dim: int, num_classes: int) -> nn.Sequential:
+    """Builds the classification head shared by training and inference."""
+    return nn.Sequential(
+        nn.LayerNorm(embed_dim),
+        nn.Linear(embed_dim, num_classes),
+    )
+
+
+class DieVFMModel(nn.Module):
+    """
+    Vision Foundation Model (DINOv2) with Few-Shot Classification Head.
+    Set unfreeze_blocks > 0 to jointly fine-tune the final transformer blocks
+    instead of using DINOv2 only as a frozen feature extractor.
+    """
+    def __init__(self, backbone_name: str = "dinov2_vitb14", num_classes: int = 6, unfreeze_blocks: int = 0):
+        super().__init__()
+        self.backbone_name = backbone_name
+        self.num_classes = num_classes
+        self.unfreeze_blocks = unfreeze_blocks
+
+        # Load Vision Transformer
+        try:
+            self.backbone = torch.hub.load("facebookresearch/dinov2", backbone_name)
+        except Exception:
+            self.backbone = torch.hub.load("facebookresearch/dinov2", backbone_name, source="local")
+
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+        if unfreeze_blocks > 0:
+            for param in self.backbone.blocks[-unfreeze_blocks:].parameters():
+                param.requires_grad = True
+            for param in self.backbone.norm.parameters():
+                param.requires_grad = True
+
+        self.embed_dim = getattr(self.backbone, "embed_dim", 768)
+
+        self.head = build_linear_probe(self.embed_dim, num_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        features = self.backbone(x)
+        logits = self.head(features)
+        return logits
+
+
 class DieVFMClassifier(DefectClassifierInterface):
     """
     Vision Foundation Model (VFM) Classifier for Semiconductor & PCB Micro-Metrology.
-    Fine-tunes deep visual representations (e.g. ResNet/DINOv2) with a lightweight linear head
-    for sub-micron physical line defect classification.
+    Uses NV-DINOv2 / DINOv2 self-supervised visual representations for sub-micron physical line defect classification.
     """
     def __init__(
         self,
+        backbone_name: str = "dinov2_vitb14",
         num_classes: int = 6,
-        embedding_dim: int = 512,
-        weights_path: Optional[str] = None
+        embedding_dim: Optional[int] = None,
+        weights_path: Optional[str] = None,
+        device: Optional[str] = None,
+        unfreeze_blocks: int = 0
     ):
+        self.backbone_name = backbone_name
         self.num_classes = num_classes
-        self.embedding_dim = embedding_dim
         self.classes = DIE_DEFECT_CLASSES
-        self.use_pytorch = False
-        self.torch_model = None
-        self.torch_head = None
-        self.device = None
+        self.custom_embedding_dim = embedding_dim
 
-        # Fallback pure-python linear weights (W: embedding_dim x num_classes, b: num_classes)
-        random.seed(42)
-        self.weights = [[random.gauss(0, 0.01) for _ in range(num_classes)] for _ in range(embedding_dim)]
-        self.bias = [0.0 for _ in range(num_classes)]
+        # Auto-detect compute hardware (Apple Silicon MPS, NVIDIA CUDA, or CPU)
+        if device is not None:
+            self.device = torch.device(device)
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        elif torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
 
-        # Initialize PyTorch deep neural network if available
-        try:
-            import torch
-            import torch.nn as nn
-            import torchvision.models as models
+        if weights_path and os.path.exists(weights_path):
+            checkpoint = torch.load(weights_path, map_location="cpu", weights_only=False)
+            if not isinstance(checkpoint, dict):
+                raise ValueError(f"Invalid VFM checkpoint: {weights_path}")
+            backbone_name = checkpoint.get("backbone", checkpoint.get("backbone_name", backbone_name))
+            checkpoint_classes = checkpoint.get("classes", DIE_DEFECT_CLASSES)
+            if checkpoint_classes != DIE_DEFECT_CLASSES:
+                raise ValueError("Checkpoint defect classes do not match the deployed classifier")
 
-            self.torch = torch
-            self.nn = nn
+        self.backbone_name = backbone_name
+        unfreeze_blocks = checkpoint.get("unfreeze_blocks", unfreeze_blocks) if weights_path and os.path.exists(weights_path) else unfreeze_blocks
+        self.model = DieVFMModel(backbone_name=backbone_name, num_classes=num_classes, unfreeze_blocks=unfreeze_blocks).to(self.device)
+        self.torch_model = self.model
+        self.torch_head = self.model.head
 
-            if torch.backends.mps.is_available():
-                self.device = torch.device("mps")
-            elif torch.cuda.is_available():
-                self.device = torch.device("cuda")
-            else:
-                self.device = torch.device("cpu")
+        # Standard cleanroom evaluation transform
+        self.eval_transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
 
-            # Backbone: ResNet18 with offline fallback for private VPCs
-            try:
-                weights = models.ResNet18_Weights.DEFAULT
-                backbone = models.resnet18(weights=weights)
-            except Exception:
-                try:
-                    backbone = models.resnet18(pretrained=True)
-                except Exception:
-                    backbone = models.resnet18(weights=None)
+        self.use_pytorch = True
+        self.weights = []
+        self.bias = []
 
-            # Freeze early feature layers, unfreeze layer3 & layer4 for domain adaptation
-            for param in backbone.parameters():
-                param.requires_grad = False
-            for param in backbone.layer3.parameters():
-                param.requires_grad = True
-            for param in backbone.layer4.parameters():
-                param.requires_grad = True
-
-            # Classification head
-            self.torch_head = nn.Linear(512, self.num_classes)
-            backbone.fc = self.torch_head
-
-            self.torch_model = backbone.to(self.device)
-            self.use_pytorch = True
-
-            if weights_path and os.path.exists(weights_path):
-                self.load_checkpoint(weights_path)
-            else:
-                self._sync_weights_from_head()
-        except Exception:
-            self.use_pytorch = False
+        if weights_path:
+            self.load_checkpoint(weights_path)
+        else:
+            self._sync_weights_from_head()
 
     def _sync_weights_from_head(self):
-        """Syncs PyTorch linear head parameters to CPU python lists."""
-        if self.use_pytorch and self.torch_head is not None:
-            with self.torch.no_grad():
-                self.weights = self.torch_head.weight.t().cpu().tolist()
-                self.bias = self.torch_head.bias.cpu().tolist()
-
-    def extract_features(self, image: Image.Image) -> List[float]:
-        """Extracts 512-dim visual embedding from image using convolutional feature layers and texture statistics."""
-        if self.use_pytorch and self.torch_model is not None:
-            import torch
-            import torchvision.transforms as T
-            self.torch_model.eval()
-            transform = T.Compose([
-                T.Resize((224, 224)),
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
-            tensor = transform(image.convert("RGB")).unsqueeze(0).to(self.device)
+        """Syncs head parameters to CPU python lists for inspection and export."""
+        if self.model and self.model.head:
             with torch.no_grad():
-                x = self.torch_model.conv1(tensor)
-                x = self.torch_model.bn1(x)
-                x = self.torch_model.relu(x)
-                x = self.torch_model.maxpool(x)
-                x = self.torch_model.layer1(x)
-                x = self.torch_model.layer2(x)
-                x = self.torch_model.layer3(x)
-                x = self.torch_model.layer4(x)
-                x = self.torch_model.avgpool(x)
-                feat = torch.flatten(x, 1).squeeze(0).cpu().tolist()
-                norm = math.sqrt(sum(v**2 for v in feat)) + 1e-8
-                return [v / norm for v in feat]
+                linear_layer = self.model.head[-1]
+                self.weights = linear_layer.weight.t().cpu().tolist()
+                self.bias = linear_layer.bias.cpu().tolist()
+
+    def extract_features(self, images: Union[Image.Image, List[Image.Image], torch.Tensor]) -> Any:
+        """Extracts DINOv2 representations from input micrographs."""
+        self.model.eval()
+        if isinstance(images, Image.Image):
+            tensor = self.eval_transform(images).unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                feat = self.model.backbone(tensor)[0].cpu()
+                if self.custom_embedding_dim and len(feat) != self.custom_embedding_dim:
+                    if self.custom_embedding_dim > len(feat):
+                        feat = torch.cat([feat, torch.zeros(self.custom_embedding_dim - len(feat))])
+                    else:
+                        feat = feat[:self.custom_embedding_dim]
+                return feat.tolist()
+        elif isinstance(images, list) and len(images) > 0 and isinstance(images[0], Image.Image):
+            tensors = torch.stack([self.eval_transform(img) for img in images]).to(self.device)
+            with torch.no_grad():
+                return self.model.backbone(tensors)
+        elif isinstance(images, torch.Tensor):
+            tensor = images.to(self.device)
+            if tensor.dim() == 3:
+                tensor = tensor.unsqueeze(0)
+            with torch.no_grad():
+                return self.model.backbone(tensor)
         else:
-            return [random.gauss(0, 0.05) for _ in range(self.embedding_dim)]
+            raise ValueError("Unsupported input format for extract_features")
 
-    def predict_logits(self, features_or_image: Any) -> List[float]:
-        """Runs forward pass to compute class logits."""
-        if self.use_pytorch and self.torch_model is not None and isinstance(features_or_image, Image.Image):
-            import torch
-            import torchvision.transforms as T
-            self.torch_model.eval()
-            transform = T.Compose([
-                T.Resize((224, 224)),
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
-            tensor = transform(features_or_image.convert("RGB")).unsqueeze(0).to(self.device)
-            with torch.no_grad():
-                logits = self.torch_model(tensor).squeeze(0).cpu().tolist()
-                return logits
-        elif isinstance(features_or_image, list):
-            logits = [0.0 for _ in range(self.num_classes)]
-            for j in range(self.num_classes):
-                dot = sum(features_or_image[i] * self.weights[i][j] for i in range(min(len(features_or_image), len(self.weights))))
-                logits[j] = dot + self.bias[j]
-            return logits
-        return [0.0] * self.num_classes
+    def predict_logits(self, image_data: Any) -> List[float]:
+        """Runs forward pass through DINOv2 and returns class logits."""
+        self.model.eval()
+        with torch.no_grad():
+            if isinstance(image_data, Image.Image):
+                tensor = self.eval_transform(image_data).unsqueeze(0).to(self.device)
+                logits = self.model(tensor)
+                return logits[0].cpu().tolist()
+            elif isinstance(image_data, torch.Tensor):
+                tensor = image_data.to(self.device)
+                if tensor.dim() == 3:
+                    tensor = tensor.unsqueeze(0)
+                logits = self.model(tensor)
+                return logits[0].cpu().tolist()
+            else:
+                return [0.0] * self.num_classes
 
     def softmax(self, logits: List[float]) -> List[float]:
+        """Computes numerically stable softmax probabilities."""
         max_l = max(logits)
         exp_l = [math.exp(x - max_l) for x in logits]
         sum_exp = sum(exp_l) + 1e-8
@@ -165,81 +194,61 @@ class DieVFMClassifier(DefectClassifierInterface):
         """Saves PyTorch state dict and training metadata."""
         checkpoint_path = str(checkpoint_path)
         os.makedirs(os.path.dirname(os.path.abspath(checkpoint_path)), exist_ok=True)
+        self._sync_weights_from_head()
 
-        if self.use_pytorch and self.torch_model is not None:
-            import torch
-            self._sync_weights_from_head()
-            torch.save({
-                "epoch": epoch,
-                "val_accuracy": val_accuracy,
-                "model_state_dict": self.torch_model.state_dict(),
-                "head_state_dict": self.torch_head.state_dict() if self.torch_head else None,
-                "metadata": metadata or {}
-            }, checkpoint_path)
-            return checkpoint_path
-
-        json_path = f"{checkpoint_path}.json" if not checkpoint_path.endswith(".json") else checkpoint_path
-        with open(json_path, "w") as f:
-            json.dump({
-                "epoch": epoch,
-                "val_accuracy": val_accuracy,
-                "weights": self.weights,
-                "bias": self.bias,
-                "metadata": metadata or {}
-            }, f, indent=2)
-        return json_path
+        torch.save({
+            "epoch": epoch,
+            "val_accuracy": val_accuracy,
+            "backbone_name": self.backbone_name,
+            "unfreeze_blocks": self.model.unfreeze_blocks,
+            "model_state_dict": self.model.state_dict(),
+            "head_state_dict": self.model.head.state_dict(),
+            "metadata": metadata or {}
+        }, checkpoint_path)
+        return checkpoint_path
 
     def save_safetensors(self, safetensors_path: Union[str, Path]) -> str:
-        """Saves model weights in modern, secure SafeTensors format."""
+        """Saves linear probe head in Hugging Face SafeTensors format."""
         safetensors_path = str(safetensors_path)
         os.makedirs(os.path.dirname(os.path.abspath(safetensors_path)), exist_ok=True)
         try:
             from safetensors.torch import save_file
-            if self.use_pytorch and self.torch_head is not None:
-                tensors_dict = {
-                    "weight": self.torch_head.weight.contiguous(),
-                    "bias": self.torch_head.bias.contiguous()
-                }
-                save_file(tensors_dict, safetensors_path)
-                return safetensors_path
+            tensors_dict = {
+                f"head_{k}": v.contiguous() for k, v in self.model.head.state_dict().items()
+            }
+            save_file(tensors_dict, safetensors_path)
+            return safetensors_path
         except Exception:
-            pass
-        return safetensors_path
+            return safetensors_path
 
     def load_checkpoint(self, checkpoint_path: Union[str, Path]) -> Dict[str, Any]:
         """Loads weights from disk."""
         checkpoint_path = str(checkpoint_path)
-        if self.use_pytorch and self.torch_model is not None and os.path.exists(checkpoint_path):
-            import torch
-            try:
-                ckpt = torch.load(checkpoint_path, map_location=self.device)
-                if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-                    self.torch_model.load_state_dict(ckpt["model_state_dict"])
-                elif isinstance(ckpt, dict) and "head_state_dict" in ckpt and self.torch_head is not None:
-                    self.torch_head.load_state_dict(ckpt["head_state_dict"])
-                self.torch_model.eval()
-                self._sync_weights_from_head()
-                if isinstance(ckpt, dict):
-                    res = {"epoch": ckpt.get("epoch"), "val_accuracy": ckpt.get("val_accuracy")}
-                    if "metadata" in ckpt and isinstance(ckpt["metadata"], dict):
-                        res.update(ckpt["metadata"])
-                    return res
-                return {}
-            except Exception:
-                pass
-        elif os.path.exists(checkpoint_path) and checkpoint_path.endswith(".json"):
-            with open(checkpoint_path, "r") as f:
-                data = json.load(f)
-                self.weights = data.get("weights", self.weights)
-                self.bias = data.get("bias", self.bias)
-                res = {"epoch": data.get("epoch"), "val_accuracy": data.get("val_accuracy")}
-                if "metadata" in data and isinstance(data["metadata"], dict):
-                    res.update(data["metadata"])
-                return res
-        return {}
+        if not os.path.exists(checkpoint_path):
+            return {}
+
+        ckpt = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+        if not isinstance(ckpt, dict):
+            raise ValueError(f"Invalid VFM checkpoint: {checkpoint_path}")
+        if ckpt.get("backbone", ckpt.get("backbone_name", self.backbone_name)) != self.backbone_name:
+            raise ValueError("Checkpoint backbone does not match the initialized classifier")
+        if ckpt.get("classes", DIE_DEFECT_CLASSES) != self.classes:
+            raise ValueError("Checkpoint defect classes do not match the initialized classifier")
+        if "model_state_dict" in ckpt:
+            self.model.load_state_dict(ckpt["model_state_dict"], strict=True)
+        elif "head_state_dict" in ckpt:
+            self.model.head.load_state_dict(ckpt["head_state_dict"], strict=True)
+        else:
+            raise ValueError("Checkpoint is missing model_state_dict or head_state_dict")
+        self.model.eval()
+        self._sync_weights_from_head()
+        res = {"epoch": ckpt.get("epoch"), "val_accuracy": ckpt.get("val_accuracy")}
+        if "metadata" in ckpt and isinstance(ckpt["metadata"], dict):
+            res.update(ckpt["metadata"])
+        return res
 
     def classify_patch(self, image_data: Any) -> Dict[str, Any]:
-        """Classifies an optical die crop."""
+        """Classifies an optical die crop and returns structured probabilities."""
         logits = self.predict_logits(image_data)
         probs = self.softmax(logits)
         pred_idx = probs.index(max(probs))

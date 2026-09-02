@@ -49,11 +49,12 @@ class TestDieVFM(unittest.TestCase):
         engine_file = os.path.join(self.temp_dir.name, "model.engine")
 
         res_onnx = exporter.export_onnx(onnx_file)
-        self.assertEqual(res_onnx["status"], "ONNX_EXPORT_SUCCESS")
+        self.assertEqual(res_onnx["status"], "ONNX_EXPORT_FAILED")
+        self.assertFalse(os.path.exists(onnx_file))
 
         res_trt = exporter.build_tensorrt_engine(onnx_file, engine_file)
-        self.assertEqual(res_trt["status"], "TENSORRT_ENGINE_BUILT")
-        self.assertTrue(os.path.exists(engine_file))
+        self.assertEqual(res_trt["status"], "TENSORRT_ENGINE_NOT_BUILT")
+        self.assertFalse(os.path.exists(engine_file))
         self.assertIn("benchmarks", res_trt)
 
 
