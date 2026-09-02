@@ -7,7 +7,7 @@ from src.rag.cache import SemanticRAGCache
 
 class FMEARetriever:
     """
-    Retrieves matching FMEA troubleshooting SOPs using semantic similarity and keyword relevance.
+    Retrieves matching FMEA troubleshooting SOPs using semantic similarity and chamber relevance.
     Backed by SemanticRAGCache for sub-millisecond response latency (Comp 24).
     """
     def __init__(self, corpus_dir: Optional[Path] = None, cache: Optional[SemanticRAGCache] = None):
@@ -17,26 +17,44 @@ class FMEARetriever:
         self.cache = cache or SemanticRAGCache()
 
     def _compute_relevance_score(self, query: str, chunk: FMEAChunk) -> float:
-        query_terms = set(re.findall(r"\w+", query.lower()))
+        q_lower = query.lower()
+        query_terms = set(re.findall(r"\w+", q_lower))
         if not query_terms:
             return 0.0
 
-        # Term overlap in content, title, and failure classes
         content_text = f"{chunk.doc_id} {chunk.section_title} {chunk.content} {' '.join(chunk.failure_classes)} {chunk.tool_chamber}".lower()
         matched_terms = [t for t in query_terms if t in content_text]
-        
-        # Boost if failure class or chamber explicitly matches
-        boost = 1.0
-        for fc in chunk.failure_classes:
-            if fc.lower() in query.lower():
-                boost += 0.5
-        if chunk.tool_chamber.lower() in query.lower():
-            boost += 0.5
+        raw_score = len(matched_terms) / len(query_terms)
 
-        raw_score = (len(matched_terms) / len(query_terms)) * boost
+        # Precise Chamber Grounding
+        if "etch" in q_lower:
+            if "etch" in chunk.doc_id.lower() or "etch" in chunk.tool_chamber.lower():
+                raw_score += 0.5
+            else:
+                return 0.0
+        elif "litho" in q_lower:
+            if "litho" in chunk.doc_id.lower() or "litho" in chunk.tool_chamber.lower() or "scanner" in chunk.tool_chamber.lower():
+                raw_score += 0.5
+            else:
+                return 0.0
+        elif "cmp" in q_lower:
+            if "cmp" in chunk.doc_id.lower() or "cmp" in chunk.tool_chamber.lower() or "platen" in chunk.tool_chamber.lower():
+                raw_score += 0.5
+            else:
+                return 0.0
+
+        # Exact Defect class match boost (e.g. Center, Short, Scratch, Open)
+        for fc in chunk.failure_classes:
+            if fc.lower() in q_lower:
+                raw_score += 0.4
+
+        # Actionable section priority (Section 2 troubleshooting SOP over Section 1 overview)
+        if any(h in chunk.section_title.lower() for h in ["excursion", "corrective", "action", "sop", "mechanism"]):
+            raw_score += 0.3
+
         return min(1.0, round(raw_score, 4))
 
-    def retrieve(self, query: str, top_k: int = 3, min_score: float = 0.2) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 2, min_score: float = 0.2) -> List[Dict[str, Any]]:
         # 1. Check Semantic Cache
         cached_result = self.cache.get(query, top_k)
         if cached_result is not None:
@@ -58,9 +76,3 @@ class FMEARetriever:
         # 4. Store in Cache
         self.cache.set(query, top_k, results)
         return results
-
-    def get_citation_by_doc_id(self, doc_id: str) -> Optional[Dict[str, Any]]:
-        for chunk in self.chunks:
-            if chunk.doc_id == doc_id:
-                return chunk.to_dict()
-        return None
