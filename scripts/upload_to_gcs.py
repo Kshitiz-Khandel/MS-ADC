@@ -17,7 +17,7 @@ def run_cmd(cmd_list, check=True):
 
 
 def upload_to_gcs(
-    bucket_target: str = "gs://aditya-jit-projects/MS-ADC",
+    bucket_target: str = "gs://aditya-jit/assests",
     version: str = "v1.0.0",
     upload_dataset: bool = True
 ):
@@ -87,7 +87,7 @@ def upload_to_gcs(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Upload MS-ADC artifacts and datasets to Google Cloud Storage")
-    parser.add_argument("--bucket", type=str, default="gs://aditya-jit-projects/MS-ADC", help="GCS target destination URI")
+    parser.add_argument("--bucket", type=str, default="gs://aditya-jit/assests", help="GCS target destination URI")
     parser.add_argument("--version", type=str, default="v1.0.0", help="Model version tag")
     parser.add_argument("--skip-dataset", action="store_true", help="Skip uploading the large dataset zip")
 

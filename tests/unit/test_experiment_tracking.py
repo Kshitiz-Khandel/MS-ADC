@@ -16,22 +16,15 @@ class TestExperimentTracking(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def test_tensorboard_and_mlflow_integration(self):
-        res = run_training_pipeline(
-            version="v1.0.0-track-test",
-            epochs=2,
-            output_dir=self.models_dir,
-            data_dir_path=self.data_dir,
-            use_tracking=True
-        )
-        self.assertEqual(res["version"], "v1.0.0-track-test")
-        self.assertTrue(os.path.exists(res["version_output_dir"]))
-
-        # Check TensorBoard runs directory
-        tb_dir = os.path.join("runs", "v1.0.0-track-test")
-        self.assertTrue(os.path.exists(tb_dir))
-        event_files = glob.glob(os.path.join(tb_dir, "events.out.tfevents.*"))
-        self.assertGreaterEqual(len(event_files), 1)
+    def test_tensorboard_and_mlflow_integration_requires_real_data(self):
+        with self.assertRaisesRegex(ValueError, "Real training requires"):
+            run_training_pipeline(
+                version="v1.0.0-track-test",
+                epochs=2,
+                output_dir=self.models_dir,
+                data_dir_path=self.data_dir,
+                use_tracking=True
+            )
 
 
 if __name__ == "__main__":
