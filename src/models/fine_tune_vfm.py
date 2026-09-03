@@ -402,7 +402,7 @@ def fine_tune_vfm(
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
                 best_epoch = epoch
-                best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+                best_model_state = {k: v.clone() for k, v in model.state_dict().items()}
                 status_flag = "⭐ Best Model"
 
             epoch_history.append({
@@ -616,6 +616,8 @@ if __name__ == "__main__":
     parser.add_argument("--num-aug", type=int, default=7, help="Cleanroom optical augmentations per sample (linear-probe mode only)")
     parser.add_argument("--unfreeze-blocks", type=int, default=0, help="Number of final DINOv2 transformer blocks to jointly fine-tune (0 = frozen linear probe)")
     parser.add_argument("--backbone-lr", type=float, default=1e-5, help="Learning rate for unfrozen backbone blocks")
+    parser.add_argument("--batch-size", type=int, default=32, help="Batch size for training")
+    parser.add_argument("--backbone", type=str, default="dinov2_vitb14", help="DINOv2 backbone version")
     parser.add_argument("--data-path", type=str, default="data/pcb_dataset", help="Path to defect dataset")
     parser.add_argument("--progression", action="store_true", help="Run 4-stage experimental progression")
 
@@ -632,5 +634,7 @@ if __name__ == "__main__":
             num_aug=args.num_aug,
             data_path=args.data_path,
             unfreeze_blocks=args.unfreeze_blocks,
-            backbone_lr=args.backbone_lr
+            backbone_lr=args.backbone_lr,
+            batch_size=args.batch_size,
+            backbone_name=args.backbone
         )
